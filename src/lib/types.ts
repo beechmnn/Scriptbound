@@ -1,0 +1,37 @@
+export type Locale = 'en' | 'de';
+export type Palette = 'gold' | 'petrol';
+export type PracticeMode = 'glyph' | 'word' | 'sentence' | 'encode' | 'handwriting';
+export type PracticeSet = 'adaptive' | 'mistakes' | 'all';
+export type LearningStage = 'unseen' | 'acquiring' | 'reviewing' | 'learned' | 'durable';
+export type GlyphProgress = {
+	letter: string;
+	introduced: boolean;
+	attempts: number;
+	correct: number;
+	streak: number;
+	mastery: number;
+	averageTimeMs: number;
+	lastPractisedAt: number;
+	nextReviewAt: number;
+	reviewLevel: number;
+	stage: LearningStage;
+	acquisitionCorrect: number;
+	successfulReviews: number;
+	lapses: number;
+	isolatedAttempts: number;
+	isolatedCorrect: number;
+	contextualAttempts: number;
+	contextualCorrect: number;
+	encodingAttempts: number;
+	encodingCorrect: number;
+	handwritingAttempts: number;
+	handwritingCorrect: number;
+	handwritingAlmost: number;
+	recentFirstAttempts: boolean[];
+	correctResponseTimesMs: number[];
+};
+export type AnswerPart = {
+	character: string;
+	expected: string;
+	status: 'correct' | 'wrong' | 'missing' | 'extra';
+};
