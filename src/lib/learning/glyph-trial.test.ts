@@ -3,6 +3,7 @@ import type { GlyphProgress } from '$lib/types';
 import { newGlyphProgress } from './scheduler';
 import {
 	betterGlyphTrialRecord,
+	firstUncompletedUnlockedGlyphTrialTier,
 	formatGlyphTrialTime,
 	glyphTrialFinalTime,
 	glyphTrialPool,
@@ -48,6 +49,19 @@ describe('glyph fluency trials', () => {
 		expect(
 			unlockedGlyphTrialTiers(curriculum, introducedProgress(curriculum.slice(0, 17))),
 		).toEqual(['initiate', 'scribe']);
+	});
+
+	it('offers the first unlocked tier that has not been completed', () => {
+		const progress = introducedProgress(curriculum.slice(0, 12));
+		expect(firstUncompletedUnlockedGlyphTrialTier(curriculum, progress, new Set())).toBe(
+			'initiate',
+		);
+		expect(
+			firstUncompletedUnlockedGlyphTrialTier(curriculum, progress, new Set(['initiate'])),
+		).toBe('scribe');
+		expect(
+			firstUncompletedUnlockedGlyphTrialTier(curriculum, progress, new Set(['initiate', 'scribe'])),
+		).toBeUndefined();
 	});
 
 	it('adds two seconds for every mistake', () => {

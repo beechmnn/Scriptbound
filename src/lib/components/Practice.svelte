@@ -22,6 +22,7 @@
 		GLYPH_TRIAL_LENGTH,
 		GLYPH_TRIAL_MISTAKE_PENALTY_MS,
 		GLYPH_TRIAL_TIERS,
+		firstUncompletedUnlockedGlyphTrialTier,
 		glyphTrialFinalTime,
 		glyphTrialPool,
 		isGlyphTrialTierUnlocked,
@@ -29,6 +30,13 @@
 	} from '$lib/learning/glyph-trial';
 	import { createEncodingKeys } from '$lib/learning/encoding-keys';
 	import { scheduleAdaptiveFallback } from '$lib/learning/practice-set';
+	import {
+		createGuidedLesson,
+		EMPTY_GUIDED_LESSON_HISTORY,
+		lessonQuestionTotal,
+		type GuidedLessonHistory,
+		type GuidedLessonStep,
+	} from '$lib/learning/guided-lesson';
 	import {
 		answerInputDisabled,
 		restoreAnswerInputFocus,
@@ -47,6 +55,8 @@
 		saveGlyphTrialRecord,
 	} from '$lib/stores/glyph-trials';
 	import type { Locale, PracticeMode, PracticeSet } from '$lib/types';
+	import { currentCourse } from '$lib/app';
+	const GUIDED_LESSON_SEEN_KEY = `scriptbound:guided-lesson-seen:${currentCourse.id}:v1`;
 	let {
 		startWithMistakes = false,
 		startWithTrial = false,
@@ -66,6 +76,20 @@
 		const choices = values.length > 1 ? values.filter((v) => v !== previous) : values;
 		return choices[Math.floor(Math.random() * choices.length)];
 	};
+	const FIREWORK_PARTICLES = [
+		{ x: 0, y: -82, delay: 0 },
+		{ x: 42, y: -68, delay: 30 },
+		{ x: 73, y: -38, delay: 60 },
+		{ x: 82, y: 0, delay: 20 },
+		{ x: 67, y: 45, delay: 50 },
+		{ x: 38, y: 73, delay: 80 },
+		{ x: 0, y: 84, delay: 40 },
+		{ x: -43, y: 70, delay: 70 },
+		{ x: -74, y: 39, delay: 100 },
+		{ x: -84, y: 0, delay: 50 },
+		{ x: -68, y: -45, delay: 80 },
+		{ x: -38, y: -73, delay: 110 },
+	] as const;
 	let t = $derived(copy[$locale].practice),
 		curriculum = $derived(curricula[$locale]),
 		content = $derived(practiceContent[$locale]);
@@ -89,8 +113,19 @@
 		glyphAnswerMethod = $state<'type' | 'buttons'>('type'),
 		letterChoices = $state(createLetterChoices(curricula[$locale][0], alphabet)),
 		encodingKeys = $state(createEncodingKeys(curricula[$locale][0], alphabet));
+	let lessonStatus = $state<'inactive' | 'active' | 'transition' | 'complete'>('inactive'),
+		lessonPlan = $state<GuidedLessonStep[]>([]),
+		lessonStepIndex = $state(0),
+		lessonStepCompleted = $state(0),
+		lessonCompletedQuestions = $state(0),
+		lessonCorrectAtStart = $state(0),
+		lessonIntroducedAtStart = $state<string[]>([]),
+		lessonWordTargets = $state<string[]>([]),
+		lessonWordsSeen = $state<string[]>([]),
+		lessonHistory = $state<GuidedLessonHistory>(EMPTY_GUIDED_LESSON_HISTORY),
+		lessonLocale = $state<Locale>('en');
 	let trialVisible = $state(initialTrial),
-		trialState = $state<'idle' | 'running' | 'complete'>('idle'),
+		trialState = $state<'idle' | 'ready' | 'countdown' | 'running' | 'complete'>('idle'),
 		selectedTrialTier = $state<GlyphTrialTierId>(initialTrialTier),
 		trialLocale = $state<Locale>('en'),
 		trialPool = $state<string[]>([]),
@@ -106,7 +141,12 @@
 		trialRawTime = $state(0),
 		trialFinalTime = $state(0),
 		trialIsPersonalBest = $state(false),
-		trialPenaltyVisible = $state(false);
+		trialPenaltyVisible = $state(false),
+		trialCountdown = $state(3),
+		trialComboPulse = $state(0),
+		trialMilestone = $state<number | null>(null),
+		trialPreviousBestTime = $state<number | null>(null),
+		trialImprovementMs = $state(0);
 	let handwritingHasInk = $state(false),
 		drawingSubmitted = $state(false),
 		handwritingAssessment = $state<'correct' | 'almost' | 'incorrect' | null>(null),
@@ -118,6 +158,8 @@
 		wordReturnScrollTop = $state<number | null>(null),
 		nextTimer: ReturnType<typeof setInterval> | undefined,
 		trialTimer: ReturnType<typeof setInterval> | undefined,
+		trialCountdownTimer: ReturnType<typeof setInterval> | undefined,
+		trialComboEffectTimer: ReturnType<typeof setTimeout> | undefined,
 		attentionFallbackTimer: ReturnType<typeof setTimeout> | undefined;
 	let options = $derived<{ value: PracticeMode; label: string }[]>([
 			{ value: 'glyph', label: t.modes.glyph },
@@ -132,7 +174,9 @@
 		),
 		currentTrialRecord = $derived(
 			$glyphTrialRecords[glyphTrialRecordKey($locale, selectedTrialTier)],
-		);
+		),
+		currentLessonStep = $derived(lessonPlan[lessonStepIndex]),
+		lessonTotal = $derived(lessonQuestionTotal(lessonPlan));
 	function weakLetters() {
 		return alphabet.filter((letter) => $progress[letter] && needsAttention($progress[letter]));
 	}
@@ -166,7 +210,12 @@
 			(letter) => $progress[letter].stage === 'unseen' || $progress[letter].stage === 'acquiring',
 		).length;
 		const due = introduced.filter((letter) => needsAttention($progress[letter])).length;
-		const mayIntroduce = introduced.length < 4 || (acquiring < 4 && due <= 6);
+		const lessonNewGlyphs = introduced.filter(
+			(letter) => !lessonIntroducedAtStart.includes(letter),
+		).length;
+		const lessonAllowsIntroduction = lessonStatus !== 'active' || lessonNewGlyphs < 1;
+		const mayIntroduce =
+			lessonAllowsIntroduction && (introduced.length < 4 || (acquiring < 4 && due <= 6));
 		const nextNew = mayIntroduce
 			? curriculum.find((letter) => !introduced.includes(letter))
 			: undefined;
@@ -174,6 +223,15 @@
 			? [...repetitionPriorities, ...introduced, nextNew]
 			: [...repetitionPriorities, ...introduced];
 		return candidates.length ? [...new Set(candidates)] : [curriculum[0]];
+	}
+	function nextContextGlyph(introduced: Set<string>) {
+		if (
+			lessonStatus === 'active' &&
+			[...introduced].some((letter) => !lessonIntroducedAtStart.includes(letter))
+		) {
+			return undefined;
+		}
+		return curriculum.find((letter) => !introduced.has(letter));
 	}
 	function familiarity(text: string) {
 		const letters = [...new Set(text.replace(/[^a-z]/g, '').split(''))];
@@ -241,6 +299,9 @@
 				: averageMastery() < 0.55
 					? content.words
 					: [...content.words, ...content.sentences];
+		if (mode === 'word' && lessonStatus === 'active' && lessonWordTargets.length) {
+			return lessonWordTargets;
+		}
 		if (practiceSet === 'mistakes' && weak.length) {
 			const filtered = source.filter((text) => weak.some((letter) => text.includes(letter)));
 			if (filtered.length) return filtered;
@@ -248,11 +309,11 @@
 		if (practiceSet === 'adaptive') {
 			const introduced = introducedLetters();
 			if (mode === 'word') {
-				const nextNew = curriculum.find((letter) => !introduced.has(letter));
+				const nextNew = nextContextGlyph(introduced);
 				return adaptiveWordCandidates(source, introduced, nextNew);
 			}
 			if (mode === 'encode') {
-				const nextNew = curriculum.find((letter) => !introduced.has(letter));
+				const nextNew = nextContextGlyph(introduced);
 				return adaptiveTexts(
 					adaptiveEncodingCandidates(source, introduced, nextNew),
 					Math.max(4, Math.round(4 + averageMastery() * 12)),
@@ -314,6 +375,9 @@
 			if (!shownWordTargets.includes(nextTarget)) {
 				shownWordTargets = [...shownWordTargets, nextTarget];
 			}
+			if (lessonStatus === 'active' && !lessonWordsSeen.includes(nextTarget)) {
+				lessonWordsSeen = [...lessonWordsSeen, nextTarget];
+			}
 			return nextTarget;
 		}
 		noAdaptiveWord = false;
@@ -360,6 +424,10 @@
 	function clearTrialTimer() {
 		if (trialTimer) clearInterval(trialTimer);
 		trialTimer = undefined;
+		if (trialCountdownTimer) clearInterval(trialCountdownTimer);
+		trialCountdownTimer = undefined;
+		if (trialComboEffectTimer) clearTimeout(trialComboEffectTimer);
+		trialComboEffectTimer = undefined;
 	}
 	function exitTrial() {
 		clearTrialTimer();
@@ -368,6 +436,7 @@
 		focusAnswer();
 	}
 	function showTrial() {
+		leaveLesson();
 		clearNextTimer();
 		trialVisible = true;
 		if (trialState !== 'idle') exitTrial();
@@ -376,6 +445,120 @@
 		exitTrial();
 		trialVisible = false;
 	}
+	function lessonStepLabel(step: GuidedLessonStep) {
+		return t.lesson.steps[step.mode](step.questions);
+	}
+	function lessonHistoryKey(value: Locale) {
+		return `scriptbound:guided-lesson-history:${currentCourse.id}:${value}:v1`;
+	}
+	function loadLessonHistory(value: Locale): GuidedLessonHistory {
+		try {
+			const saved = JSON.parse(localStorage.getItem(lessonHistoryKey(value)) ?? 'null');
+			if (
+				saved &&
+				Number.isInteger(saved.completedLessons) &&
+				Array.isArray(saved.recentWords) &&
+				saved.recentWords.every((word: unknown) => typeof word === 'string')
+			) {
+				return {
+					completedLessons: Math.max(0, saved.completedLessons),
+					recentWords: saved.recentWords.slice(-24),
+				};
+			}
+		} catch {
+			// Begin with an empty history when browser storage is unavailable or invalid.
+		}
+		return { ...EMPTY_GUIDED_LESSON_HISTORY };
+	}
+	function saveLessonHistory(completed: boolean) {
+		const nextHistory = {
+			completedLessons: lessonHistory.completedLessons + (completed ? 1 : 0),
+			recentWords: [...lessonHistory.recentWords, ...lessonWordsSeen].slice(-24),
+		};
+		lessonHistory = nextHistory;
+		lessonWordsSeen = [];
+		try {
+			localStorage.setItem(lessonHistoryKey(lessonLocale), JSON.stringify(nextHistory));
+		} catch {
+			// The current lesson remains usable without persistent browser storage.
+		}
+	}
+	function prepareLessonIntroduction() {
+		const nextNew = curriculum.find((letter) => !$progress[letter]?.introduced);
+		if (!nextNew) return;
+		target = nextNew;
+		prepareTargetIntroduction();
+		letterChoices = createLetterChoices(target, alphabet);
+		encodingKeys = createEncodingKeys(target, alphabet);
+		focusAnswer();
+	}
+	function shouldStartFirstLesson() {
+		if (Object.values($progress).some((item) => item.attempts > 0)) return false;
+		try {
+			if (localStorage.getItem(GUIDED_LESSON_SEEN_KEY)) return false;
+			localStorage.setItem(GUIDED_LESSON_SEEN_KEY, '1');
+		} catch {
+			// The lesson can still start when browser storage is unavailable.
+		}
+		return true;
+	}
+	function startLesson() {
+		clearNextTimer();
+		lessonLocale = $locale;
+		lessonHistory = loadLessonHistory(lessonLocale);
+		const nextLesson = createGuidedLesson(curriculum, $progress, content.words, lessonHistory);
+		lessonPlan = nextLesson.steps;
+		lessonWordTargets = nextLesson.wordTargets;
+		lessonStepIndex = 0;
+		lessonStepCompleted = 0;
+		lessonCompletedQuestions = 0;
+		lessonCorrectAtStart = score;
+		lessonIntroducedAtStart = curriculum.filter((letter) => $progress[letter]?.introduced);
+		lessonWordsSeen = [];
+		lessonStatus = 'active';
+		practiceSet = 'adaptive';
+		reset(lessonPlan[0]?.mode ?? 'glyph');
+		prepareLessonIntroduction();
+	}
+	function continueLesson() {
+		const nextStep = lessonPlan[lessonStepIndex + 1];
+		if (!nextStep) return;
+		lessonStepIndex++;
+		lessonStepCompleted = 0;
+		lessonStatus = 'active';
+		reset(nextStep.mode);
+	}
+	function leaveLesson() {
+		if (lessonStatus === 'inactive') return;
+		clearNextTimer();
+		if (lessonWordsSeen.length) saveLessonHistory(false);
+		lessonStatus = 'inactive';
+		lessonPlan = [];
+		lessonWordTargets = [];
+		lessonStepIndex = 0;
+		lessonStepCompleted = 0;
+	}
+	function chooseFreeMode(nextMode: PracticeMode) {
+		leaveLesson();
+		reset(nextMode);
+	}
+	function returnToFreePractice() {
+		leaveLesson();
+		reset(mode);
+	}
+	function completeLessonQuestion() {
+		if (lessonStatus !== 'active' || !currentLessonStep) return false;
+		lessonStepCompleted++;
+		lessonCompletedQuestions++;
+		if (lessonStepCompleted < currentLessonStep.questions) return false;
+		clearNextTimer();
+		if (lessonStepIndex < lessonPlan.length - 1) lessonStatus = 'transition';
+		else {
+			lessonStatus = 'complete';
+			saveLessonHistory(true);
+		}
+		return true;
+	}
 	function trialTierUnlocked(tierId: GlyphTrialTierId) {
 		return isGlyphTrialTierUnlocked(curriculum, $progress, tierId);
 	}
@@ -383,11 +566,41 @@
 		return glyphTrialPool(curriculum, tierId).filter((letter) => !$progress[letter]?.introduced)
 			.length;
 	}
+	function lessonTrialOffer() {
+		const completedTiers = new Set(
+			GLYPH_TRIAL_TIERS.filter(
+				(tier) => $glyphTrialRecords[glyphTrialRecordKey(lessonLocale, tier.id)],
+			).map((tier) => tier.id),
+		);
+		return firstUncompletedUnlockedGlyphTrialTier(curriculum, $progress, completedTiers);
+	}
+	function startLessonTrial(tierId: GlyphTrialTierId) {
+		selectedTrialTier = tierId;
+		showTrial();
+		prepareTrial();
+	}
 	function nextTrialPrompt(previous?: string) {
 		trialTarget = pick(trialPool, previous);
 		trialChoices = createLetterChoices(trialTarget, trialPool);
 		trialWrongChoices = [];
 		trialPenaltyVisible = false;
+	}
+	function prepareTrial() {
+		if (!trialTierUnlocked(selectedTrialTier)) return;
+		clearNextTimer();
+		clearTrialTimer();
+		trialPenaltyVisible = false;
+		trialState = 'ready';
+	}
+	function beginTrialCountdown() {
+		if (!trialTierUnlocked(selectedTrialTier)) return;
+		clearTrialTimer();
+		trialCountdown = 3;
+		trialState = 'countdown';
+		trialCountdownTimer = setInterval(() => {
+			if (trialCountdown <= 1) startTrial();
+			else trialCountdown--;
+		}, 1_000);
 	}
 	function startTrial() {
 		if (!trialTierUnlocked(selectedTrialTier)) return;
@@ -399,9 +612,14 @@
 		trialMistakes = 0;
 		trialCombo = 0;
 		trialBestCombo = 0;
+		trialComboPulse = 0;
+		trialMilestone = null;
 		trialRawTime = 0;
 		trialFinalTime = 0;
 		trialIsPersonalBest = false;
+		trialPreviousBestTime =
+			$glyphTrialRecords[glyphTrialRecordKey(trialLocale, selectedTrialTier)]?.finalTimeMs ?? null;
+		trialImprovementMs = 0;
 		trialState = 'running';
 		nextTrialPrompt();
 		trialStartedAt = Date.now();
@@ -420,6 +638,10 @@
 			bestCombo: trialBestCombo,
 			completedAt: Date.now(),
 		});
+		trialImprovementMs =
+			trialIsPersonalBest && trialPreviousBestTime !== null
+				? Math.max(0, trialPreviousBestTime - trialFinalTime)
+				: 0;
 		trialState = 'complete';
 	}
 	function submitTrialLetter(letter: string) {
@@ -427,6 +649,8 @@
 		if (letter !== trialTarget) {
 			trialMistakes++;
 			trialCombo = 0;
+			trialMilestone = null;
+			if (trialComboEffectTimer) clearTimeout(trialComboEffectTimer);
 			trialWrongChoices = [...trialWrongChoices, letter];
 			trialPenaltyVisible = true;
 			trialNow = Date.now();
@@ -434,7 +658,16 @@
 		}
 		trialCorrect++;
 		trialCombo++;
+		trialComboPulse++;
 		trialBestCombo = Math.max(trialBestCombo, trialCombo);
+		if ([5, 10, 15].includes(trialCombo)) {
+			trialMilestone = trialCombo;
+			if (trialComboEffectTimer) clearTimeout(trialComboEffectTimer);
+			trialComboEffectTimer = setTimeout(() => {
+				trialMilestone = null;
+				trialComboEffectTimer = undefined;
+			}, 700);
+		}
 		if (trialCorrect >= GLYPH_TRIAL_LENGTH) completeTrial();
 		else nextTrialPrompt(trialTarget);
 	}
@@ -576,6 +809,7 @@
 	function next() {
 		clearNextTimer();
 		question++;
+		if (completeLessonQuestion()) return;
 		const retry = question % 4 === 0 ? mistakeQueue[0] : undefined;
 		if (retry && retry !== target) {
 			mistakeQueue = mistakeQueue.slice(1);
@@ -610,7 +844,9 @@
 	onMount(() => {
 		if (window.matchMedia('(max-width: 620px)').matches) glyphAnswerMethod = 'buttons';
 		window.addEventListener('keydown', handleTrialKeydown);
-		if (initialMode !== 'glyph' && !initialTrial) reset(initialMode);
+		if (!initialMistakes && !initialTrial && initialMode === 'glyph' && shouldStartFirstLesson()) {
+			startLesson();
+		} else if (initialMode !== 'glyph' && !initialTrial) reset(initialMode);
 		else {
 			prepareTargetIntroduction();
 			focusAnswer();
@@ -624,14 +860,40 @@
 	});
 </script>
 
-<div class="mode-tabs" role="group" aria-label={t.modeLabel}>
-	{#each options as option}<button
-			class:active={!trialVisible && mode === option.value}
-			onclick={() => reset(option.value)}>{option.label}</button
-		>{/each}
-	<button class:active={trialVisible} onclick={showTrial}>{t.trial.tab}</button>
-</div>
-{#if !trialVisible}
+{#if lessonStatus === 'inactive'}
+	<section class="lesson-launcher" aria-labelledby="guided-lesson-title">
+		<div>
+			<p class="eyebrow">{t.lesson.eyebrow}</p>
+			<h2 id="guided-lesson-title">{t.lesson.title}</h2>
+			<p>{t.lesson.body}</p>
+		</div>
+		<button type="button" onclick={startLesson}>{t.lesson.start}</button>
+	</section>
+	<p class="free-practice-label">{t.lesson.freePractice}</p>
+	<div class="mode-tabs" role="group" aria-label={t.modeLabel}>
+		{#each options as option}<button
+				class:active={!trialVisible && mode === option.value}
+				onclick={() => chooseFreeMode(option.value)}>{option.label}</button
+			>{/each}
+		<button class:active={trialVisible} onclick={showTrial}>{t.trial.tab}</button>
+	</div>
+{:else}
+	<section class="lesson-progress" aria-label={t.lesson.progressLabel}>
+		<div>
+			<p class="eyebrow">{t.lesson.eyebrow}</p>
+			<strong>{t.lesson.progress(lessonCompletedQuestions, lessonTotal)}</strong>
+		</div>
+		<ol>
+			{#each lessonPlan as step, index}
+				<li class:current={index === lessonStepIndex} class:complete={index < lessonStepIndex}>
+					<span>{index < lessonStepIndex ? '✓' : index + 1}</span>{lessonStepLabel(step)}
+				</li>
+			{/each}
+		</ol>
+		<button type="button" class="secondary" onclick={leaveLesson}>{t.lesson.leave}</button>
+	</section>
+{/if}
+{#if !trialVisible && lessonStatus === 'inactive'}
 	<div class="practice-settings">
 		<label for="practice-set">{t.questionSet}</label><select
 			id="practice-set"
@@ -673,16 +935,60 @@
 					{t.trial.locked(trialTierRemaining(selectedTrialTier), selectedTrialGlyphCount)}
 				{/if}
 			</small>
-			<button type="button" disabled={!trialTierUnlocked(selectedTrialTier)} onclick={startTrial}>
-				{t.trial.start}
+			<button type="button" disabled={!trialTierUnlocked(selectedTrialTier)} onclick={prepareTrial}>
+				{t.trial.open}
 			</button>
 		</div>
 	</section>
 {/if}
 {#if trialVisible}
 	{#if trialState !== 'idle'}
-		<section class="practice-card trial-card" aria-labelledby="active-glyph-trial-title">
-			{#if trialState === 'running'}
+		<section
+			class="practice-card trial-card"
+			class:combo-building={trialState === 'running' && trialCombo >= 3}
+			class:combo-strong={trialState === 'running' && trialCombo >= 7}
+			class:combo-peak={trialState === 'running' && trialCombo >= 12}
+			class:combo-milestone-active={Boolean(trialMilestone)}
+			class:personal-best={trialState === 'complete' && trialIsPersonalBest}
+			aria-labelledby="active-glyph-trial-title"
+		>
+			{#if trialState === 'ready'}
+				<div class="trial-meta" aria-hidden="true">
+					<span>{t.trial.progress(0, GLYPH_TRIAL_LENGTH)}</span>
+					<strong>{formatGlyphTrialTime(0)}</strong>
+					<span>{t.trial.mistakes(0)}</span>
+				</div>
+				<div class="trial-heading">
+					<div>
+						<p class="eyebrow">{t.trial.tiers[selectedTrialTier]}</p>
+						<h2 id="active-glyph-trial-title">{t.trial.title}</h2>
+					</div>
+					<strong class="trial-combo">{t.trial.combo(0)}</strong>
+				</div>
+				<div class="trial-ready-prompt" aria-hidden="true"><span></span></div>
+				<div class="trial-choice-placeholders" aria-hidden="true">
+					<span></span><span></span><span></span><span></span>
+				</div>
+				<p class="trial-ready-copy">{t.trial.ready}</p>
+				<div class="trial-ready-actions">
+					<button type="button" class="secondary" onclick={returnToPractice}>{t.trial.exit}</button>
+					<button type="button" onclick={beginTrialCountdown}>{t.trial.start}</button>
+				</div>
+			{:else if trialState === 'countdown'}
+				<div class="trial-heading">
+					<div>
+						<p class="eyebrow">{t.trial.tiers[selectedTrialTier]}</p>
+						<h2 id="active-glyph-trial-title">{t.trial.title}</h2>
+					</div>
+				</div>
+				<div class="trial-countdown" role="timer" aria-live="assertive">
+					<span>{t.trial.countdown}</span>
+					<strong>{trialCountdown}</strong>
+				</div>
+				<div class="trial-ready-actions">
+					<button type="button" class="secondary" onclick={returnToPractice}>{t.trial.exit}</button>
+				</div>
+			{:else if trialState === 'running'}
 				<div class="trial-meta" aria-live="polite">
 					<span>{t.trial.progress(trialCorrect, GLYPH_TRIAL_LENGTH)}</span>
 					<strong
@@ -697,8 +1003,17 @@
 						<p class="eyebrow">{t.trial.tiers[selectedTrialTier]}</p>
 						<h2 id="active-glyph-trial-title">{t.trial.title}</h2>
 					</div>
-					<strong class="trial-combo">{t.trial.combo(trialCombo)}</strong>
+					{#key trialComboPulse}
+						<strong class:combo-active={trialCombo >= 2} class="trial-combo"
+							>{t.trial.combo(trialCombo)}</strong
+						>
+					{/key}
 				</div>
+				{#if trialMilestone}
+					<div class="trial-combo-milestone" role="status">
+						{t.trial.comboMilestone(trialMilestone)}
+					</div>
+				{/if}
 				<div class="trial-prompt"><GlyphText text={trialTarget} /></div>
 				<div class="trial-choices" aria-label={t.trial.choices}>
 					{#each trialChoices as letter}
@@ -718,11 +1033,35 @@
 				</div>
 			{:else}
 				<div class="trial-results" role="status">
+					{#if trialIsPersonalBest && trialPreviousBestTime !== null}
+						<div class="personal-best-fireworks" aria-hidden="true">
+							{#each [0, 1, 2] as burst}
+								<div class:second={burst === 1} class:third={burst === 2} class="firework-burst">
+									{#each FIREWORK_PARTICLES as particle}
+										<i
+											style={`--firework-x: ${particle.x}px; --firework-y: ${particle.y}px; --firework-delay: ${particle.delay}ms;`}
+										></i>
+									{/each}
+								</div>
+							{/each}
+						</div>
+					{/if}
 					<p class="eyebrow">{t.trial.complete}</p>
 					<h2 id="active-glyph-trial-title">
 						{trialIsPersonalBest ? t.trial.newBest : t.trial.finalTime}
 					</h2>
 					<strong class="trial-final-time">{formatGlyphTrialTime(trialFinalTime)}</strong>
+					{#if trialIsPersonalBest}
+						<strong class="personal-best-badge">
+							{trialPreviousBestTime === null
+								? t.trial.firstRecord
+								: t.trial.faster(
+										trialImprovementMs < 100
+											? t.trial.lessThanTenth
+											: formatGlyphTrialTime(trialImprovementMs),
+									)}
+						</strong>
+					{/if}
 					<div class="trial-result-details">
 						<span>{t.trial.rawTime(formatGlyphTrialTime(trialRawTime))}</span>
 						<span>{t.trial.mistakes(trialMistakes)}</span>
@@ -732,12 +1071,51 @@
 						<button type="button" class="secondary" onclick={returnToPractice}
 							>{t.trial.exit}</button
 						>
-						<button type="button" onclick={startTrial}>{t.trial.retry}</button>
+						<button type="button" onclick={prepareTrial}>{t.trial.retry}</button>
 					</div>
 				</div>
 			{/if}
 		</section>
 	{/if}
+{:else if lessonStatus === 'transition' && currentLessonStep}
+	<section class="lesson-boundary practice-card" aria-live="polite">
+		<p class="eyebrow">{t.lesson.stepComplete}</p>
+		<h2>{t.lesson.completedStep(t.modes[currentLessonStep.mode])}</h2>
+		{#if lessonPlan[lessonStepIndex + 1]}
+			<p>{t.lesson.nextStep(t.modes[lessonPlan[lessonStepIndex + 1].mode])}</p>
+			<div class="actions">
+				<button type="button" class="secondary" onclick={returnToFreePractice}
+					>{t.lesson.stop}</button
+				>
+				<button type="button" onclick={continueLesson}>{t.lesson.continue}</button>
+			</div>
+		{/if}
+	</section>
+{:else if lessonStatus === 'complete'}
+	{@const offeredTrialTier = lessonTrialOffer()}
+	<section class="lesson-boundary lesson-complete practice-card" aria-live="polite">
+		<p class="eyebrow">{t.lesson.completeEyebrow}</p>
+		<h2>{t.lesson.completeTitle}</h2>
+		<p>{t.lesson.completeBody(score - lessonCorrectAtStart, lessonCompletedQuestions)}</p>
+		{#if offeredTrialTier}
+			<p class="lesson-trial-offer">
+				{t.lesson.trialOffer(t.trial.tiers[offeredTrialTier])}
+			</p>
+		{/if}
+		<div class="actions">
+			<button type="button" class="secondary" onclick={returnToFreePractice}
+				>{t.lesson.freePractice}</button
+			>
+			<button type="button" class:secondary={Boolean(offeredTrialTier)} onclick={startLesson}
+				>{t.lesson.another}</button
+			>
+			{#if offeredTrialTier}
+				<button type="button" onclick={() => startLessonTrial(offeredTrialTier)}
+					>{t.lesson.trialCta(t.trial.tiers[offeredTrialTier])}</button
+				>
+			{/if}
+		</div>
+	</section>
 {:else}
 	<div
 		class="practice-card"
@@ -1013,6 +1391,113 @@
 {/if}
 
 <style>
+	.lesson-launcher {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1.5rem;
+		margin: 2rem 0 0;
+		padding: 1.25rem;
+		border: 1px solid var(--accent);
+		border-left-width: 4px;
+		border-radius: 0.55rem;
+		background: linear-gradient(135deg, var(--panel), var(--card-end));
+	}
+	.lesson-launcher > div {
+		display: grid;
+		gap: 0.35rem;
+	}
+	.lesson-launcher h2,
+	.lesson-launcher p,
+	.lesson-progress p,
+	.lesson-boundary h2,
+	.lesson-boundary p {
+		margin: 0;
+	}
+	.lesson-launcher > div > p:last-child,
+	.lesson-boundary > p:not(.eyebrow) {
+		color: var(--muted);
+	}
+	.lesson-launcher > button {
+		flex: 0 0 auto;
+	}
+	.free-practice-label {
+		margin: 1.5rem 0 -1.35rem;
+		color: var(--muted);
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+	}
+	.lesson-progress {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 1.25rem;
+		margin: 2rem 0 1rem;
+		padding: 1rem 1.2rem;
+		border: 1px solid var(--line);
+		border-radius: 0.55rem;
+		background: var(--panel);
+	}
+	.lesson-progress > div {
+		display: grid;
+		gap: 0.2rem;
+	}
+	.lesson-progress strong {
+		font-size: 0.85rem;
+	}
+	.lesson-progress ol {
+		display: flex;
+		justify-content: center;
+		gap: 0.5rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.lesson-progress li {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		color: var(--muted);
+		font-size: 0.78rem;
+	}
+	.lesson-progress li span {
+		display: grid;
+		width: 1.55rem;
+		height: 1.55rem;
+		place-items: center;
+		border: 1px solid var(--line);
+		border-radius: 50%;
+		font-size: 0.7rem;
+	}
+	.lesson-progress li.current {
+		color: var(--ink);
+		font-weight: 700;
+	}
+	.lesson-progress li.current span,
+	.lesson-progress li.complete span {
+		color: var(--active-ink);
+		border-color: var(--accent);
+		background: var(--accent);
+	}
+	.lesson-boundary {
+		display: grid;
+		min-height: 28rem;
+		place-content: center;
+		justify-items: center;
+		gap: 0.8rem;
+		text-align: center;
+	}
+	.lesson-boundary .actions {
+		justify-content: center;
+	}
+	.lesson-complete h2 {
+		color: var(--accent);
+		font:
+			500 clamp(2.2rem, 7vw, 4rem) / 1.05 Georgia,
+			serif;
+	}
 	.trial-launcher {
 		display: grid;
 		grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
@@ -1071,7 +1556,54 @@
 		opacity: 0.38;
 	}
 	.trial-card {
+		position: relative;
 		min-height: 34rem;
+		overflow: hidden;
+		transition:
+			border-color 180ms ease,
+			box-shadow 180ms ease;
+	}
+	.trial-card::before {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		background: radial-gradient(
+			circle at center,
+			color-mix(in srgb, var(--accent) 26%, transparent),
+			transparent 62%
+		);
+		opacity: 0;
+		pointer-events: none;
+		content: '';
+	}
+	.trial-card.combo-building {
+		border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+		box-shadow:
+			inset 0 0 55px color-mix(in srgb, var(--accent) 10%, transparent),
+			0 30px 80px #0008;
+	}
+	.trial-card.combo-strong {
+		box-shadow:
+			inset 0 0 85px color-mix(in srgb, var(--accent) 17%, transparent),
+			0 0 38px color-mix(in srgb, var(--accent) 20%, transparent),
+			0 30px 80px #0008;
+	}
+	.trial-card.combo-peak {
+		border-color: var(--accent);
+		box-shadow:
+			inset 0 0 115px color-mix(in srgb, var(--accent) 24%, transparent),
+			0 0 52px color-mix(in srgb, var(--accent) 28%, transparent),
+			0 30px 80px #0008;
+	}
+	.trial-card.combo-milestone-active {
+		animation: combo-screen-shake 320ms ease-out;
+	}
+	.trial-card.combo-milestone-active::before {
+		animation: combo-screen-pulse 520ms ease-out;
+	}
+	.trial-card.personal-best {
+		border-color: var(--accent);
+		animation: personal-best-card 700ms ease-out;
 	}
 	.trial-meta {
 		display: grid;
@@ -1101,11 +1633,104 @@
 		color: var(--accent);
 		font-size: 1.1rem;
 	}
+	.trial-combo.combo-active {
+		animation: combo-pop 180ms ease-out;
+	}
+	.trial-combo-milestone {
+		position: absolute;
+		top: 5.5rem;
+		left: 50%;
+		z-index: 2;
+		padding: 0.4rem 0.75rem;
+		border: 1px solid var(--accent);
+		border-radius: 999px;
+		color: var(--active-ink);
+		background: var(--accent);
+		box-shadow: 0 0 28px color-mix(in srgb, var(--accent) 40%, transparent);
+		font-size: 0.75rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		pointer-events: none;
+		animation: milestone-in 700ms ease-out forwards;
+	}
 	.trial-prompt {
 		display: grid;
 		min-height: 12rem;
 		place-items: center;
 		font-size: clamp(5rem, 16vw, 9rem);
+		transition:
+			transform 160ms ease,
+			filter 160ms ease;
+	}
+	.trial-card.combo-building .trial-prompt {
+		filter: drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 35%, transparent));
+		transform: scale(1.015);
+	}
+	.trial-card.combo-strong .trial-prompt {
+		filter: drop-shadow(0 0 13px color-mix(in srgb, var(--accent) 52%, transparent));
+		transform: scale(1.035);
+	}
+	.trial-card.combo-peak .trial-prompt {
+		filter: drop-shadow(0 0 19px color-mix(in srgb, var(--accent) 68%, transparent));
+		transform: scale(1.055);
+	}
+	.trial-ready-prompt {
+		display: grid;
+		min-height: 12rem;
+		place-items: center;
+	}
+	.trial-ready-prompt span {
+		display: block;
+		width: clamp(4.5rem, 14vw, 7rem);
+		aspect-ratio: 1;
+		border: 1px dashed var(--line);
+		border-radius: 0.55rem;
+		background: var(--field);
+	}
+	.trial-ready-copy {
+		margin: 0;
+		color: var(--muted);
+		text-align: center;
+	}
+	.trial-choice-placeholders {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 0.75rem;
+		max-width: 38rem;
+		margin: 0 auto;
+	}
+	.trial-choice-placeholders span {
+		min-height: 4rem;
+		border: 1px dashed var(--line);
+		border-radius: 0.4rem;
+		background: var(--field);
+	}
+	.trial-ready-actions {
+		display: flex;
+		justify-content: center;
+		gap: 0.7rem;
+		margin-top: 1.25rem;
+	}
+	.trial-countdown {
+		display: grid;
+		min-height: 22rem;
+		place-content: center;
+		justify-items: center;
+		gap: 0.4rem;
+	}
+	.trial-countdown span {
+		color: var(--muted);
+		font-size: 0.75rem;
+		font-weight: 700;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+	}
+	.trial-countdown strong {
+		color: var(--accent);
+		font:
+			500 clamp(6rem, 20vw, 10rem) / 1 Georgia,
+			serif;
 	}
 	.trial-choices {
 		display: grid;
@@ -1119,6 +1744,18 @@
 		min-height: 4rem;
 		font-size: 1.1rem;
 		font-weight: 700;
+		transition:
+			border-color 140ms ease,
+			box-shadow 140ms ease;
+	}
+	.trial-card.combo-strong .trial-choices button {
+		box-shadow: inset 0 0 18px color-mix(in srgb, var(--accent) 7%, transparent);
+	}
+	.trial-card.combo-peak .trial-choices button {
+		border-color: color-mix(in srgb, var(--accent) 68%, var(--line));
+		box-shadow:
+			inset 0 0 24px color-mix(in srgb, var(--accent) 12%, transparent),
+			0 0 12px color-mix(in srgb, var(--accent) 9%, transparent);
 	}
 	.trial-choices button.incorrect {
 		color: #fff1ef;
@@ -1145,6 +1782,7 @@
 		visibility: visible;
 	}
 	.trial-results {
+		position: relative;
 		display: grid;
 		min-height: 29rem;
 		place-content: center;
@@ -1152,11 +1790,84 @@
 		gap: 0.8rem;
 		text-align: center;
 	}
+	.trial-results > :not(.personal-best-fireworks) {
+		position: relative;
+		z-index: 2;
+	}
+	.personal-best-fireworks {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		overflow: hidden;
+		pointer-events: none;
+	}
+	.firework-burst {
+		position: absolute;
+		top: 34%;
+		left: 24%;
+	}
+	.firework-burst.second {
+		top: 42%;
+		left: 76%;
+	}
+	.firework-burst.third {
+		top: 24%;
+		left: 50%;
+	}
+	.firework-burst::before {
+		position: absolute;
+		width: 1rem;
+		height: 1rem;
+		border: 2px solid var(--accent);
+		border-radius: 50%;
+		box-shadow: 0 0 24px var(--accent);
+		transform: translate(-50%, -50%) scale(0);
+		animation: firework-bloom 520ms ease-out forwards;
+		content: '';
+	}
+	.firework-burst.second::before {
+		animation-delay: 220ms;
+	}
+	.firework-burst.third::before {
+		animation-delay: 440ms;
+	}
+	.firework-burst i {
+		position: absolute;
+		top: -2px;
+		left: -2px;
+		display: block;
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+		background: var(--accent);
+		box-shadow: 0 0 9px var(--accent);
+		opacity: 0;
+		animation: firework-particle 900ms cubic-bezier(0.16, 0.72, 0.34, 1) forwards;
+		animation-delay: var(--firework-delay);
+	}
+	.firework-burst i:nth-child(3n) {
+		background: var(--ink);
+	}
+	.firework-burst.second i {
+		animation-delay: calc(var(--firework-delay) + 220ms);
+	}
+	.firework-burst.third i {
+		animation-delay: calc(var(--firework-delay) + 440ms);
+	}
 	.trial-final-time {
 		color: var(--accent);
 		font:
 			500 clamp(4rem, 12vw, 7rem) / 1 Georgia,
 			serif;
+	}
+	.personal-best-badge {
+		padding: 0.45rem 0.8rem;
+		border: 1px solid var(--accent);
+		border-radius: 999px;
+		color: var(--accent);
+		font-size: 0.8rem;
+		letter-spacing: 0.04em;
+		animation: best-badge-in 500ms 120ms ease-out both;
 	}
 	.trial-result-details {
 		display: flex;
@@ -1471,7 +2182,101 @@
 			transform: scaleX(0);
 		}
 	}
+	@keyframes combo-pop {
+		50% {
+			transform: scale(1.18);
+			text-shadow: 0 0 16px var(--accent);
+		}
+	}
+	@keyframes combo-screen-shake {
+		20% {
+			transform: translateX(-4px) rotate(-0.15deg);
+		}
+		40% {
+			transform: translateX(4px) rotate(0.15deg);
+		}
+		60% {
+			transform: translateX(-2px);
+		}
+		80% {
+			transform: translateX(2px);
+		}
+	}
+	@keyframes combo-screen-pulse {
+		0% {
+			opacity: 0.8;
+			transform: scale(0.85);
+		}
+		100% {
+			opacity: 0;
+			transform: scale(1.15);
+		}
+	}
+	@keyframes milestone-in {
+		0% {
+			opacity: 0;
+			transform: translate(-50%, 0.5rem) scale(0.9);
+		}
+		25%,
+		70% {
+			opacity: 1;
+			transform: translate(-50%, 0) scale(1);
+		}
+		100% {
+			opacity: 0;
+			transform: translate(-50%, -0.35rem) scale(1);
+		}
+	}
+	@keyframes personal-best-card {
+		0% {
+			box-shadow:
+				inset 0 0 100px color-mix(in srgb, var(--accent) 24%, transparent),
+				0 0 55px color-mix(in srgb, var(--accent) 35%, transparent);
+		}
+	}
+	@keyframes firework-bloom {
+		0% {
+			opacity: 0;
+			transform: translate(-50%, -50%) scale(0);
+		}
+		35% {
+			opacity: 0.85;
+		}
+		100% {
+			opacity: 0;
+			transform: translate(-50%, -50%) scale(4.5);
+		}
+	}
+	@keyframes firework-particle {
+		0% {
+			opacity: 0;
+			transform: translate(0, 0) scale(0.4);
+		}
+		18%,
+		58% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0;
+			transform: translate(var(--firework-x), var(--firework-y)) scale(0.15);
+		}
+	}
+	@keyframes best-badge-in {
+		from {
+			opacity: 0;
+			transform: translateY(0.35rem) scale(0.94);
+		}
+	}
 	@media (max-width: 760px) {
+		.lesson-progress {
+			grid-template-columns: 1fr auto;
+		}
+		.lesson-progress ol {
+			grid-column: 1 / -1;
+			grid-row: 2;
+			justify-content: start;
+			flex-wrap: wrap;
+		}
 		.trial-launcher {
 			grid-template-columns: 1fr;
 		}
@@ -1494,7 +2299,18 @@
 		}
 	}
 	@media (max-width: 520px) {
-		.trial-choices {
+		.lesson-launcher {
+			align-items: stretch;
+			flex-direction: column;
+		}
+		.lesson-progress li {
+			font-size: 0;
+		}
+		.lesson-progress li span {
+			font-size: 0.7rem;
+		}
+		.trial-choices,
+		.trial-choice-placeholders {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 		.trial-meta {
@@ -1506,6 +2322,28 @@
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
+		.trial-card,
+		.trial-card.combo-milestone-active,
+		.trial-combo,
+		.trial-combo-milestone,
+		.personal-best-badge {
+			transition: none;
+			animation: none;
+		}
+		.personal-best-fireworks {
+			display: none;
+		}
+		.trial-combo-milestone {
+			opacity: 1;
+			transform: translateX(-50%);
+		}
+		.trial-card::before {
+			display: none;
+		}
+		.trial-card .trial-prompt {
+			transition: none;
+			transform: none;
+		}
 		.countdown-track i {
 			animation: none;
 		}

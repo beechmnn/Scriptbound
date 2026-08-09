@@ -44,6 +44,17 @@ export function unlockedGlyphTrialTiers(
 	).map((tier) => tier.id);
 }
 
+export function firstUncompletedUnlockedGlyphTrialTier(
+	curriculum: string[],
+	progress: Record<string, GlyphProgress>,
+	completedTiers: ReadonlySet<GlyphTrialTierId>,
+): GlyphTrialTierId | undefined {
+	return GLYPH_TRIAL_TIERS.find(
+		(tier) =>
+			!completedTiers.has(tier.id) && isGlyphTrialTierUnlocked(curriculum, progress, tier.id),
+	)?.id;
+}
+
 export function glyphTrialFinalTime(rawTimeMs: number, mistakes: number): number {
 	return Math.max(0, rawTimeMs) + Math.max(0, mistakes) * GLYPH_TRIAL_MISTAKE_PENALTY_MS;
 }
