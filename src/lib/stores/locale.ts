@@ -1,8 +1,10 @@
 import { browser } from '$app/environment';
 import { writable } from 'svelte/store';
 import type { Locale } from '$lib/types';
+import { readMigratedValue } from './persistence';
 
-const KEY = 'necrofonticon-locale-v1';
+const KEY = 'scriptbound:locale:v1';
+const LEGACY_KEYS = ['necrofonticon-locale-v1'];
 const isLocale = (value: string | null): value is Locale => value === 'en' || value === 'de';
 
 export function resolveLocale(saved: string | null, browserLanguage: string): Locale {
@@ -12,7 +14,7 @@ export function resolveLocale(saved: string | null, browserLanguage: string): Lo
 
 function initialLocale(): Locale {
 	if (!browser) return 'en';
-	return resolveLocale(localStorage.getItem(KEY), navigator.language);
+	return resolveLocale(readMigratedValue(localStorage, KEY, LEGACY_KEYS), navigator.language);
 }
 
 export const locale = writable<Locale>(initialLocale());

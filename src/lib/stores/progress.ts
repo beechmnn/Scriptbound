@@ -1,11 +1,16 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import type { GlyphProgress, PracticeMode } from '$lib/types';
-import { newGlyphProgress, scheduleAttempt } from '$lib/learning/scheduler';
+import { newGlyphProgress, prioritizeRepetition, scheduleAttempt } from '$lib/learning/scheduler';
 import { compareAnswer, normalizeAnswer } from '$lib/learning/answer-checker';
-const KEY = 'necrofonticon-progress-v1';
+import { currentCourse } from '$lib/app';
+import { readMigratedValue } from './persistence';
+
+const KEY = `scriptbound:progress:${currentCourse.id}:v1`;
+const LEGACY_KEYS = ['necrofonticon-progress-v1'];
 export type ProgressBackup = {
-	version: 1;
+	version: 2;
+	course: typeof currentCourse.id;
 	exportedAt: string;
 	progress: Record<string, GlyphProgress>;
 };
@@ -53,7 +58,7 @@ function migrate(saved: Record<string, Partial<GlyphProgress>>): Record<string, 
 function loadSaved(): Record<string, GlyphProgress> {
 	if (!browser) return {};
 	try {
-		return migrate(JSON.parse(localStorage.getItem(KEY) ?? '{}'));
+		return migrate(JSON.parse(readMigratedValue(localStorage, KEY, LEGACY_KEYS) ?? '{}'));
 	} catch {
 		return {};
 	}
@@ -76,12 +81,19 @@ export function recordGuidedIntroduction(letter: string, successful: boolean) {
 	if (successful) introduceGlyph(letter);
 }
 export function createProgressBackup(value: Record<string, GlyphProgress>): ProgressBackup {
-	return { version: 1, exportedAt: new Date().toISOString(), progress: value };
+	return {
+		version: 2,
+		course: currentCourse.id,
+		exportedAt: new Date().toISOString(),
+		progress: value,
+	};
 }
 export function restoreProgressBackup(value: unknown): Record<string, GlyphProgress> {
 	if (!value || typeof value !== 'object') throw new Error('Invalid progress backup');
-	const backup = value as { version?: unknown; progress?: unknown };
-	if (backup.version !== 1 || !backup.progress || typeof backup.progress !== 'object') {
+	const backup = value as { version?: unknown; course?: unknown; progress?: unknown };
+	const isLegacy = backup.version === 1;
+	const isCurrent = backup.version === 2 && backup.course === currentCourse.id;
+	if ((!isLegacy && !isCurrent) || !backup.progress || typeof backup.progress !== 'object') {
 		throw new Error('Unsupported progress backup');
 	}
 	const saved = backup.progress as Record<string, Partial<GlyphProgress>>;
@@ -124,7 +136,11 @@ export function recordAttempt(
 	const target = normalizeAnswer(expected),
 		parts = compareAnswer(answer, target);
 	const outcomes = new Map<string, boolean[]>();
+	const repetitionMistakes = new Set<string>();
 	for (const part of parts) {
+		const isMistake = options.forceIncorrect || part.status !== 'correct';
+		if (isMistake && /[a-z]/.test(part.expected)) repetitionMistakes.add(part.expected);
+		if (isMistake && /[a-z]/.test(part.character)) repetitionMistakes.add(part.character);
 		if (!/[a-z]/.test(part.expected)) continue;
 		const values = outcomes.get(part.expected) ?? [];
 		values.push(!options.forceIncorrect && part.status === 'correct');
@@ -134,7 +150,14 @@ export function recordAttempt(
 		const next = { ...all };
 		for (const [letter, results] of outcomes) {
 			const old = all[letter] ?? newGlyphProgress(letter);
-			next[letter] = scheduleAttempt(old, results.every(Boolean), elapsedMs, Date.now(), options);
+			next[letter] = scheduleAttempt(old, results.every(Boolean), elapsedMs, Date.now(), {
+				...options,
+				repetitionMistake: repetitionMistakes.has(letter),
+			});
+		}
+		for (const letter of repetitionMistakes) {
+			if (outcomes.has(letter)) continue;
+			next[letter] = prioritizeRepetition(all[letter] ?? newGlyphProgress(letter));
 		}
 		return next;
 	});

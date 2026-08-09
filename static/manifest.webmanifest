@@ -1,7 +1,8 @@
 {
-	"name": "Necrofonticon Trainer",
-	"short_name": "Necro Trainer",
-	"description": "Learn to read the Necrofonticon alphabet.",
+	"id": "/",
+	"name": "Scriptbound",
+	"short_name": "Scriptbound",
+	"description": "Learn to read the scripts of other worlds.",
 	"start_url": "/",
 	"scope": "/",
 	"display": "standalone",

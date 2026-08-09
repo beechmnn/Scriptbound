@@ -1,4 +1,4 @@
-const CACHE = 'necrofonticon-v3';
+const CACHE = 'scriptbound-v4';
 const SHELL = [
 	'/',
 	'/manifest.webmanifest',

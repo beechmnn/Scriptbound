@@ -61,6 +61,20 @@ describe('evidence-based review scheduler', () => {
 		expect(result.contextualCorrect).toBe(1);
 	});
 
+	it('tracks repetition priority separately from mastery', () => {
+		const mistaken = scheduleAttempt(newGlyphProgress('a'), false, 4_000, 1_000, {
+			mode: 'word',
+			repetitionMistake: true,
+		});
+		expect(mistaken.repetitionPriority).toBe(1);
+		expect(mistaken.mastery).toBe(0);
+		expect(needsAttention(mistaken, 1_000)).toBe(true);
+
+		const corrected = scheduleAttempt(mistaken, true, 4_000, 2_000, { mode: 'word' });
+		expect(corrected.repetitionPriority).toBe(0);
+		expect(needsAttention(corrected, 2_000)).toBe(false);
+	});
+
 	it('tracks encoding accuracy separately from other contextual practice', () => {
 		const result = scheduleAttempt(newGlyphProgress('a'), true, 1_000, 0, {
 			mode: 'encode',

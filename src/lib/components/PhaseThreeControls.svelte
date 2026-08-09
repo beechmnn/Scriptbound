@@ -2,14 +2,18 @@
 	import { onDestroy, onMount } from 'svelte';
 	import { copy } from '$lib/i18n';
 	import { locale } from '$lib/stores/locale';
+	import { currentCourse } from '$lib/app';
+	import { readMigratedValue } from '$lib/stores/persistence';
 	import {
 		createProgressBackup,
 		importProgressBackup,
 		progress as progressStore,
 	} from '$lib/stores/progress';
 
-	const REMINDERS_KEY = 'necrofonticon-review-reminders';
-	const LAST_REMINDER_KEY = 'necrofonticon-last-reminder';
+	const REMINDERS_KEY = `scriptbound:reminders:${currentCourse.id}:v1`;
+	const LAST_REMINDER_KEY = `scriptbound:last-reminder:${currentCourse.id}:v1`;
+	const LEGACY_REMINDERS_KEYS = ['necrofonticon-review-reminders'];
+	const LEGACY_LAST_REMINDER_KEYS = ['necrofonticon-last-reminder'];
 	let t = $derived(copy[$locale].phase3);
 	let fileInput: HTMLInputElement;
 	let message = $state('');
@@ -23,7 +27,7 @@
 		const url = URL.createObjectURL(blob);
 		const link = document.createElement('a');
 		link.href = url;
-		link.download = `necrofonticon-progress-${new Date().toISOString().slice(0, 10)}.json`;
+		link.download = `scriptbound-${currentCourse.id}-progress-${new Date().toISOString().slice(0, 10)}.json`;
 		link.click();
 		URL.revokeObjectURL(url);
 	}
@@ -55,7 +59,11 @@
 		if (!remindersEnabled || Notification.permission !== 'granted') return;
 		const count = dueCount();
 		const today = new Date().toISOString().slice(0, 10);
-		if (!count || localStorage.getItem(LAST_REMINDER_KEY) === today) return;
+		if (
+			!count ||
+			readMigratedValue(localStorage, LAST_REMINDER_KEY, LEGACY_LAST_REMINDER_KEYS) === today
+		)
+			return;
 		const registration = await navigator.serviceWorker?.ready;
 		await registration?.showNotification(copy[$locale].document.title, {
 			body: t.reminderNotification(count),
@@ -83,7 +91,9 @@
 
 	onMount(() => {
 		notificationSupported = 'Notification' in window && 'serviceWorker' in navigator;
-		remindersEnabled = notificationSupported && localStorage.getItem(REMINDERS_KEY) === 'true';
+		remindersEnabled =
+			notificationSupported &&
+			readMigratedValue(localStorage, REMINDERS_KEY, LEGACY_REMINDERS_KEYS) === 'true';
 		void showReminder();
 		reminderTimer = setInterval(() => void showReminder(), 60 * 60 * 1_000);
 	});

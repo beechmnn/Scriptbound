@@ -1,12 +1,13 @@
 import type { LearningStage, Locale } from '$lib/types';
+import { APP_NAME, currentCourse } from '$lib/app';
 
 export const localeNames: Record<Locale, string> = { en: 'English', de: 'Deutsch' };
 
 export const copy = {
 	en: {
 		document: {
-			title: 'Necrofonticon Trainer',
-			description: 'Learn to read the Necrofonticon alphabet.',
+			title: `${APP_NAME} — ${currentCourse.name} Trainer`,
+			description: `Learn to read the ${currentCourse.name} script with ${APP_NAME}.`,
 		},
 		language: 'Language',
 		palette: 'Palette',
@@ -18,7 +19,7 @@ export const copy = {
 		},
 		font: {
 			title: 'Training font not installed',
-			bodyStart: 'Add a licensed',
+			bodyStart: 'Add the',
 			bodyEnd: 'file to static/fonts/. Exercises stay concealed until then.',
 		},
 		practicePage: {
@@ -46,9 +47,7 @@ export const copy = {
 			modes: {
 				glyph: 'Glyphs',
 				word: 'Words',
-				sentence: 'Sentences',
 				encode: 'Encode',
-				handwriting: 'Handwriting',
 			},
 			modeLabel: 'Practice mode',
 			answerMethod: {
@@ -58,7 +57,7 @@ export const copy = {
 				letters: 'Latin letter choices in random order',
 			},
 			questionSet: 'Question set',
-			sets: { adaptive: 'Adaptive progression', mistakes: 'Needs attention', all: 'All content' },
+			sets: { adaptive: 'Adaptive progression', all: 'All content' },
 			introduced: (count: number) => `${count}/26 introduced · due reviews first`,
 			introducedEncoding: (count: number) => `${count}/26 introduced · one new glyph at a time`,
 			attention: (count: number) => `${count} glyphs due or acquiring`,
@@ -68,9 +67,8 @@ export const copy = {
 			instructions: {
 				glyph: 'Which Latin letter is this?',
 				word: 'Decode this word',
-				sentence: 'Decode this sentence',
-				encode: 'Write this text in Necrofonticon',
-				handwriting: 'Draw the Necrofonticon glyph for this letter',
+				encode: `Write this text in ${currentCourse.name}`,
+				handwriting: `Draw the ${currentCourse.name} glyph for this letter`,
 			},
 			answer: 'Your answer',
 			encodedAnswer: (count: number) => `Encoded answer, ${count} glyph${count === 1 ? '' : 's'}`,
@@ -89,7 +87,7 @@ export const copy = {
 				body: 'Introduce more glyphs in Glyphs or Encode, or choose All content.',
 			},
 			keyboard: {
-				label: 'Shuffled Necrofonticon keyboard',
+				label: `Shuffled ${currentCourse.name} keyboard`,
 				key: (position: number) => `Glyph key ${position}`,
 				backspace: 'Backspace',
 				clear: 'Clear',
@@ -121,11 +119,6 @@ export const copy = {
 			reveal: 'Reveal',
 			check: 'Check answer',
 			nextButton: 'Next question',
-			customTitle: 'Practise custom text',
-			customLabel: 'English text',
-			customPlaceholder: 'the stars are right',
-			customHelp: 'Letters A–Z and spaces are supported. The text stays on this device.',
-			customStart: 'Start custom exercise',
 		},
 		comparison: {
 			label: 'Character by character answer comparison',
@@ -139,7 +132,6 @@ export const copy = {
 				accuracy: 'accuracy',
 				attention: 'need attention',
 				encoding: 'encoding accuracy',
-				handwriting: 'handwriting accuracy',
 			},
 			privacy: 'Progress is stored only in this browser.',
 			practiceMistakes: 'Practise mistakes',
@@ -150,8 +142,6 @@ export const copy = {
 			inDays: (days: number) => `In ${days} day${days === 1 ? '' : 's'}`,
 			isolated: (correct: number, attempts: number) => `${correct}/${attempts} isolated`,
 			reviews: (count: number) => `${count}/3 delayed reviews`,
-			handwriting: (correct: number, almost: number, attempts: number) =>
-				`${correct} correct, ${almost} almost / ${attempts} drawn`,
 			notPractised: 'Not practised yet',
 		},
 		phase3: {
@@ -165,14 +155,14 @@ export const copy = {
 			import: 'Import progress',
 			importConfirm: 'Replace current progress with this backup?',
 			imported: 'Progress imported successfully.',
-			invalidBackup: 'That file is not a valid Necrofonticon progress backup.',
+			invalidBackup: `That file is not a valid ${APP_NAME} progress backup for ${currentCourse.name}.`,
 			remindersTitle: 'Review reminders',
 			remindersHelp: 'Notify you about due reviews when the installed app is opened.',
 			enableReminders: 'Enable reminders',
 			disableReminders: 'Disable reminders',
 			notificationsBlocked: 'Notifications are blocked in this browser.',
 			reminderNotification: (count: number) =>
-				`${count} Necrofonticon glyph${count === 1 ? ' is' : 's are'} ready to review.`,
+				`${count} ${currentCourse.name} glyph${count === 1 ? ' is' : 's are'} ready to review.`,
 		},
 		stages: {
 			unseen: 'Unseen',
@@ -184,8 +174,8 @@ export const copy = {
 	},
 	de: {
 		document: {
-			title: 'Necrofonticon-Trainer',
-			description: 'Lerne, das Necrofonticon-Alphabet zu lesen.',
+			title: `${APP_NAME} – ${currentCourse.name}-Trainer`,
+			description: `Lerne mit ${APP_NAME}, die ${currentCourse.name}-Schrift zu lesen.`,
 		},
 		language: 'Sprache',
 		palette: 'Farbpalette',
@@ -197,8 +187,8 @@ export const copy = {
 		},
 		font: {
 			title: 'Trainingsschrift nicht installiert',
-			bodyStart: 'Füge eine lizenzierte',
-			bodyEnd: 'Datei zu static/fonts/ hinzu. Die Übungen bleiben bis dahin verborgen.',
+			bodyStart: 'Lege',
+			bodyEnd: 'unter static/fonts/ ab. Die Übungen bleiben bis dahin verborgen.',
 		},
 		practicePage: {
 			eyebrow: 'LIES, WAS NICHT GELESEN WERDEN SOLL',
@@ -225,9 +215,7 @@ export const copy = {
 			modes: {
 				glyph: 'Glyphen',
 				word: 'Wörter',
-				sentence: 'Sätze',
 				encode: 'Kodieren',
-				handwriting: 'Handschrift',
 			},
 			modeLabel: 'Übungsmodus',
 			answerMethod: {
@@ -237,7 +225,7 @@ export const copy = {
 				letters: 'Lateinische Buchstaben in zufälliger Reihenfolge',
 			},
 			questionSet: 'Aufgabenauswahl',
-			sets: { adaptive: 'Adaptiver Fortschritt', mistakes: 'Übungsbedarf', all: 'Alle Inhalte' },
+			sets: { adaptive: 'Adaptiver Fortschritt', all: 'Alle Inhalte' },
 			introduced: (count: number) => `${count}/26 eingeführt · fällige Wiederholungen zuerst`,
 			introducedEncoding: (count: number) => `${count}/26 eingeführt · jeweils eine neue Glyphe`,
 			attention: (count: number) => `${count} Glyphen fällig oder im Aufbau`,
@@ -247,9 +235,8 @@ export const copy = {
 			instructions: {
 				glyph: 'Welcher lateinische Buchstabe ist das?',
 				word: 'Entschlüssle dieses Wort',
-				sentence: 'Entschlüssle diesen Satz',
-				encode: 'Schreibe diesen Text in Necrofonticon',
-				handwriting: 'Zeichne die Necrofonticon-Glyphe für diesen Buchstaben',
+				encode: `Schreibe diesen Text in ${currentCourse.name}`,
+				handwriting: `Zeichne die ${currentCourse.name}-Glyphe für diesen Buchstaben`,
 			},
 			answer: 'Deine Antwort',
 			encodedAnswer: (count: number) =>
@@ -269,7 +256,7 @@ export const copy = {
 				body: 'Führe weitere Glyphen unter Glyphen oder Kodieren ein oder wähle Alle Inhalte.',
 			},
 			keyboard: {
-				label: 'Gemischte Necrofonticon-Tastatur',
+				label: `Gemischte ${currentCourse.name}-Tastatur`,
 				key: (position: number) => `Glyphentaste ${position}`,
 				backspace: 'Löschen',
 				clear: 'Leeren',
@@ -301,12 +288,6 @@ export const copy = {
 			reveal: 'Aufdecken',
 			check: 'Antwort prüfen',
 			nextButton: 'Nächste Aufgabe',
-			customTitle: 'Eigenen Text üben',
-			customLabel: 'Deutscher Text',
-			customPlaceholder: 'die sterne stehen richtig',
-			customHelp:
-				'Die Buchstaben A–Z und Leerzeichen werden unterstützt. Der Text bleibt auf diesem Gerät.',
-			customStart: 'Eigene Übung starten',
 		},
 		comparison: {
 			label: 'Zeichenweiser Antwortvergleich',
@@ -320,7 +301,6 @@ export const copy = {
 				accuracy: 'Genauigkeit',
 				attention: 'Übungsbedarf',
 				encoding: 'Kodiergenauigkeit',
-				handwriting: 'Handschriftgenauigkeit',
 			},
 			privacy: 'Der Fortschritt wird nur in diesem Browser gespeichert.',
 			practiceMistakes: 'Fehler üben',
@@ -332,8 +312,6 @@ export const copy = {
 			inDays: (days: number) => `In ${days} Tag${days === 1 ? '' : 'en'}`,
 			isolated: (correct: number, attempts: number) => `${correct}/${attempts} einzeln`,
 			reviews: (count: number) => `${count}/3 zeitversetzte Wiederholungen`,
-			handwriting: (correct: number, almost: number, attempts: number) =>
-				`${correct} richtig, ${almost} fast / ${attempts} gezeichnet`,
 			notPractised: 'Noch nicht geübt',
 		},
 		phase3: {
@@ -347,7 +325,7 @@ export const copy = {
 			import: 'Fortschritt importieren',
 			importConfirm: 'Den aktuellen Fortschritt durch diese Sicherung ersetzen?',
 			imported: 'Fortschritt erfolgreich importiert.',
-			invalidBackup: 'Diese Datei ist keine gültige Necrofonticon-Fortschrittssicherung.',
+			invalidBackup: `Diese Datei ist keine gültige ${APP_NAME}-Fortschrittssicherung für ${currentCourse.name}.`,
 			remindersTitle: 'Wiederholungserinnerungen',
 			remindersHelp:
 				'Benachrichtigt dich über fällige Wiederholungen, wenn die installierte App geöffnet wird.',
@@ -355,7 +333,7 @@ export const copy = {
 			disableReminders: 'Erinnerungen deaktivieren',
 			notificationsBlocked: 'Benachrichtigungen sind in diesem Browser blockiert.',
 			reminderNotification: (count: number) =>
-				`${count} Necrofonticon-Glyphe${count === 1 ? ' ist' : 'n sind'} zur Wiederholung bereit.`,
+				`${count} ${currentCourse.name}-Glyphe${count === 1 ? ' ist' : 'n sind'} zur Wiederholung bereit.`,
 		},
 		stages: {
 			unseen: 'Ungesehen',

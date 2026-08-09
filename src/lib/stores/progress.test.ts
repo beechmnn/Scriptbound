@@ -22,16 +22,28 @@ describe('progress recording', () => {
 		expect(saved.a.contextualCorrect).toBe(1);
 		expect(saved.t.contextualCorrect).toBe(0);
 		expect(saved.t.contextualAttempts).toBe(1);
-		expect(saved.b).toBeUndefined();
+		expect(saved.t.repetitionPriority).toBe(1);
+		expect(saved.b.repetitionPriority).toBe(1);
+		expect(saved.b.contextualAttempts).toBe(0);
 		expect(saved.c.stage).toBe('unseen');
+	});
+
+	it('marks both sides of an encoding confusion equally for repetition', () => {
+		recordAttempt('a', 'b', 1_000, { mode: 'encode' });
+		const saved = get(progress);
+		expect(saved.a.repetitionPriority).toBe(1);
+		expect(saved.b.repetitionPriority).toBe(1);
+		expect(saved.a.encodingAttempts).toBe(1);
+		expect(saved.b.encodingAttempts).toBe(0);
 	});
 
 	it('introduces a glyph only after the correct Latin character is selected', () => {
 		recordAttempt('a', 'b', 1_000, { mode: 'glyph' });
-		expect(get(progress).a.introduced).toBe(false);
+		expect(get(progress).a).toMatchObject({ introduced: false, repetitionPriority: 1 });
+		expect(get(progress).b.repetitionPriority).toBe(1);
 
 		recordAttempt('a', 'a', 1_000, { mode: 'glyph' });
-		expect(get(progress).a.introduced).toBe(true);
+		expect(get(progress).a).toMatchObject({ introduced: true, repetitionPriority: 0 });
 	});
 
 	it('requires every occurrence of a repeated letter to be right', () => {
@@ -46,6 +58,7 @@ describe('progress recording', () => {
 	it('round-trips a versioned progress backup', () => {
 		recordAttempt('a', 'a', 1_000, { mode: 'glyph' });
 		const backup = createProgressBackup(get(progress));
+		expect(backup).toMatchObject({ version: 2, course: 'necrofonticon' });
 		resetProgress();
 		importProgressBackup(backup);
 		expect(get(progress).a.isolatedCorrect).toBe(1);
@@ -84,6 +97,7 @@ describe('progress recording', () => {
 
 	it('rejects unsupported or malformed backups', () => {
 		expect(() => restoreProgressBackup({ version: 2, progress: {} })).toThrow();
+		expect(() => restoreProgressBackup({ version: 2, course: 'aurebesh', progress: {} })).toThrow();
 		expect(() => restoreProgressBackup({ version: 1, progress: { answer: {} } })).toThrow();
 	});
 

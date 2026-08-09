@@ -6,7 +6,11 @@ export const ACQUISITION_RECALLS = 3;
 export const LEARNED_REVIEWS = 3;
 export const DURABLE_REVIEWS = 5;
 
-export type AttemptOptions = { mode?: PracticeMode; firstAttempt?: boolean };
+export type AttemptOptions = {
+	mode?: PracticeMode;
+	firstAttempt?: boolean;
+	repetitionMistake?: boolean;
+};
 
 export function newGlyphProgress(letter: string): GlyphProgress {
 	return {
@@ -33,9 +37,14 @@ export function newGlyphProgress(letter: string): GlyphProgress {
 		handwritingAttempts: 0,
 		handwritingCorrect: 0,
 		handwritingAlmost: 0,
+		repetitionPriority: 0,
 		recentFirstAttempts: [],
 		correctResponseTimesMs: [],
 	};
+}
+
+export function prioritizeRepetition(previous: GlyphProgress): GlyphProgress {
+	return { ...previous, repetitionPriority: previous.repetitionPriority + 1 };
 }
 
 function stageForReviews(reviews: number): LearningStage {
@@ -63,7 +72,8 @@ export function scheduleAttempt(
 	options: AttemptOptions = {},
 ): GlyphProgress {
 	const mode = options.mode ?? 'glyph',
-		firstAttempt = options.firstAttempt ?? true;
+		firstAttempt = options.firstAttempt ?? true,
+		repetitionMistake = options.repetitionMistake ?? !correct;
 	const attempts = previous.attempts + 1;
 	const contextual = mode !== 'glyph',
 		encoding = mode === 'encode';
@@ -80,6 +90,9 @@ export function scheduleAttempt(
 		encodingCorrect: previous.encodingCorrect + (encoding && correct ? 1 : 0),
 		isolatedAttempts: previous.isolatedAttempts + (contextual ? 0 : 1),
 		isolatedCorrect: previous.isolatedCorrect + (!contextual && correct ? 1 : 0),
+		repetitionPriority: repetitionMistake
+			? previous.repetitionPriority + 1
+			: Math.max(0, previous.repetitionPriority - (correct ? 1 : 0)),
 	};
 
 	// Context can demonstrate transfer, but it must not promote isolated glyph mastery.
@@ -162,7 +175,8 @@ export function scheduleAttempt(
 
 export function needsAttention(item: GlyphProgress, now = Date.now()): boolean {
 	return (
-		item.isolatedAttempts > 0 &&
-		(item.stage === 'acquiring' || (item.nextReviewAt > 0 && item.nextReviewAt <= now))
+		item.repetitionPriority > 0 ||
+		(item.isolatedAttempts > 0 &&
+			(item.stage === 'acquiring' || (item.nextReviewAt > 0 && item.nextReviewAt <= now)))
 	);
 }

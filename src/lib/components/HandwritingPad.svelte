@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import { currentCourse } from '$lib/app';
 
 	type Point = { x: number; y: number; pressure: number };
 	type Stroke = Point[];
@@ -56,7 +57,7 @@
 			ctx.fillStyle = styles.getPropertyValue('--accent').trim() || '#40b5ae';
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'middle';
-			ctx.font = `${Math.round(height * 0.68)}px Necrofonticon`;
+			ctx.font = `${Math.round(height * 0.68)}px ${currentCourse.fontFamily}`;
 			ctx.fillText(reference, width / 2, height / 2);
 			ctx.restore();
 		}

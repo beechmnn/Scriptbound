@@ -8,7 +8,7 @@
 	import { alphabet, curricula, practiceContent } from '$lib/content';
 	import { copy } from '$lib/i18n';
 	import { locale } from '$lib/stores/locale';
-	import { compareAnswer, isCorrect, normalizeAnswer } from '$lib/learning/answer-checker';
+	import { compareAnswer, isCorrect } from '$lib/learning/answer-checker';
 	import {
 		progress,
 		recordAttempt,
@@ -32,7 +32,6 @@
 		isGuidedIntroductionSuccessful,
 	} from '$lib/learning/adaptive-content';
 	import type { PracticeMode, PracticeSet } from '$lib/types';
-	const sentencesEnabled = false;
 	let { startWithMistakes = false }: { startWithMistakes?: boolean } = $props();
 	const initialMistakes = untrack(() => startWithMistakes);
 	const pick = <T,>(values: T[], previous?: T) => {
@@ -52,7 +51,6 @@
 		question = $state(1),
 		score = $state(0),
 		startedAt = $state(Date.now()),
-		customText = $state(''),
 		mistakeQueue = $state<string[]>([]),
 		shownWordTargets = $state<string[]>([]),
 		currentIsRetry = $state(false),
@@ -108,6 +106,9 @@
 	}
 	function adaptiveLetters() {
 		const introduced = curriculum.filter((letter) => $progress[letter]?.introduced);
+		const repetitionPriorities = curriculum.filter(
+			(letter) => ($progress[letter]?.repetitionPriority ?? 0) > 0,
+		);
 		const acquiring = introduced.filter(
 			(letter) => $progress[letter].stage === 'unseen' || $progress[letter].stage === 'acquiring',
 		).length;
@@ -116,7 +117,10 @@
 		const nextNew = mayIntroduce
 			? curriculum.find((letter) => !introduced.includes(letter))
 			: undefined;
-		return nextNew ? [...introduced, nextNew] : introduced.length ? introduced : [curriculum[0]];
+		const candidates = nextNew
+			? [...repetitionPriorities, ...introduced, nextNew]
+			: [...repetitionPriorities, ...introduced];
+		return candidates.length ? [...new Set(candidates)] : [curriculum[0]];
 	}
 	function familiarity(text: string) {
 		const letters = [...new Set(text.replace(/[^a-z]/g, '').split(''))];
@@ -137,6 +141,12 @@
 			) / Math.max(1, letters.length)
 		);
 	}
+	function repetitionNeed(text: string) {
+		return [...new Set(text.replace(/[^a-z]/g, '').split(''))].reduce(
+			(score, letter) => score + ($progress[letter]?.repetitionPriority ?? 0),
+			0,
+		);
+	}
 	function encodingReferenceWords() {
 		const words: { letter: string; correct: boolean }[][] = [];
 		let word: { letter: string; correct: boolean }[] = [];
@@ -154,7 +164,12 @@
 	}
 	function adaptiveTexts(source: string[], limit: number) {
 		return [...source]
-			.sort((a, b) => familiarity(b) - familiarity(a) || a.length - b.length)
+			.sort(
+				(a, b) =>
+					repetitionNeed(b) - repetitionNeed(a) ||
+					familiarity(b) - familiarity(a) ||
+					a.length - b.length,
+			)
 			.slice(0, limit);
 	}
 	function pool() {
@@ -170,11 +185,9 @@
 		const source =
 			mode === 'word'
 				? content.words
-				: mode === 'sentence'
-					? content.sentences
-					: averageMastery() < 0.55
-						? content.words
-						: [...content.words, ...content.sentences];
+				: averageMastery() < 0.55
+					? content.words
+					: [...content.words, ...content.sentences];
 		if (practiceSet === 'mistakes' && weak.length) {
 			const filtered = source.filter((text) => weak.some((letter) => text.includes(letter)));
 			if (filtered.length) return filtered;
@@ -196,15 +209,18 @@
 		}
 		return source;
 	}
-	function weightedWordPick(values: string[], previous?: string) {
+	function weightedTextPick(values: string[], previous?: string) {
 		const choices = values.length > 1 ? values.filter((value) => value !== previous) : values;
-		const weighted = choices.map((word) => ({ word, weight: 1 + familiarity(word) * 3 }));
+		const weighted = choices.map((text) => ({
+			text,
+			weight: 1 + familiarity(text) * 3 + repetitionNeed(text) * 8,
+		}));
 		let cursor = Math.random() * weighted.reduce((sum, item) => sum + item.weight, 0);
 		for (const item of weighted) {
 			cursor -= item.weight;
-			if (cursor <= 0) return item.word;
+			if (cursor <= 0) return item.text;
 		}
-		return weighted.at(-1)?.word ?? values[0];
+		return weighted.at(-1)?.text ?? values[0];
 	}
 	function weightedGlyphPick(values: string[], previous?: string) {
 		const choices = values.length > 1 ? values.filter((value) => value !== previous) : values;
@@ -212,16 +228,15 @@
 			const item = $progress[letter] ?? newGlyphProgress(letter);
 			return {
 				letter,
-				weight:
-					item.stage === 'unseen'
+				weight: needsAttention(item)
+					? 12
+					: item.stage === 'unseen'
 						? 4
-						: needsAttention(item)
-							? 12
-							: item.stage === 'acquiring'
-								? 6
-								: item.stage === 'reviewing'
-									? 1
-									: 0.35,
+						: item.stage === 'acquiring'
+							? 6
+							: item.stage === 'reviewing'
+								? 1
+								: 0.35,
 			};
 		});
 		let cursor = Math.random() * weighted.reduce((sum, item) => sum + item.weight, 0);
@@ -241,7 +256,7 @@
 			const available = fresh.length ? fresh : values;
 			const nextTarget =
 				practiceSet === 'adaptive'
-					? weightedWordPick(available, previous)
+					? weightedTextPick(available, previous)
 					: pick(available, previous);
 			if (!shownWordTargets.includes(nextTarget)) {
 				shownWordTargets = [...shownWordTargets, nextTarget];
@@ -249,6 +264,7 @@
 			return nextTarget;
 		}
 		noAdaptiveWord = false;
+		if (mode === 'encode' && practiceSet !== 'all') return weightedTextPick(values, previous);
 		return (mode === 'glyph' || mode === 'handwriting') && practiceSet !== 'all'
 			? weightedGlyphPick(values, previous)
 			: pick(values, previous);
@@ -439,20 +455,6 @@
 	function changeSet(value: PracticeSet) {
 		practiceSet = value;
 		reset();
-	}
-	function startCustom() {
-		const value = normalizeAnswer(customText).replace(/[^a-z ]/g, '');
-		if (!value) return;
-		mode = 'sentence';
-		practiceSet = 'all';
-		target = value;
-		introducedGlyph = null;
-		introductionPending = false;
-		answer = '';
-		submitted = false;
-		revealed = false;
-		currentIsRetry = false;
-		startedAt = Date.now();
 	}
 	if (initialMistakes) {
 		updateAttentionFallback();
@@ -764,26 +766,6 @@
 		{/if}
 	</div>
 </div>
-{#if sentencesEnabled}
-	<details class="custom-practice">
-		<summary>{t.customTitle}</summary>
-		<form
-			onsubmit={(event) => {
-				event.preventDefault();
-				startCustom();
-			}}
-		>
-			<label for="custom-text">{t.customLabel}</label><textarea
-				id="custom-text"
-				bind:value={customText}
-				maxlength="160"
-				placeholder={t.customPlaceholder}
-			></textarea>
-			<p>{t.customHelp}</p>
-			<button type="submit">{t.customStart}</button>
-		</form>
-	</details>
-{/if}
 
 <style>
 	.practice-settings {
@@ -798,8 +780,7 @@
 	.practice-settings label {
 		margin: 0;
 	}
-	.practice-settings select,
-	textarea {
+	.practice-settings select {
 		color: var(--ink);
 		background: var(--field);
 		border: 1px solid var(--line);
@@ -1092,31 +1073,6 @@
 		to {
 			transform: scaleX(0);
 		}
-	}
-	.custom-practice {
-		margin-top: 1rem;
-		border: 1px solid var(--line);
-		border-radius: 0.5rem;
-		padding: 1rem;
-		background: var(--panel);
-	}
-	summary {
-		cursor: pointer;
-		color: var(--accent);
-	}
-	.custom-practice form {
-		margin: 1rem 0 0;
-		max-width: none;
-	}
-	.custom-practice textarea {
-		display: block;
-		width: 100%;
-		min-height: 90px;
-		resize: vertical;
-	}
-	.custom-practice p {
-		color: var(--muted);
-		font-size: 0.78rem;
 	}
 	@media (max-width: 760px) {
 		.mode-tabs {

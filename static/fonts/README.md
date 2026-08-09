@@ -1,2 +1,3 @@
-# Necrofonticon font
-Place a properly licensed `necrofonticon.woff2` file here. This project intentionally does not redistribute the font. Glyph exercises remain concealed until the browser confirms it is available.
+# Necrofonticon course font
+
+`necrofonticon.woff2` provides the glyphs for the Necrofonticon course. Glyph exercises remain concealed until the browser confirms that the course font is available.

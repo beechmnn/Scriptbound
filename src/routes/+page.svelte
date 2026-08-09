@@ -8,6 +8,7 @@
 	import { locale, setLocale } from '$lib/stores/locale';
 	import { palette, setPalette } from '$lib/stores/palette';
 	import type { Locale, Palette } from '$lib/types';
+	import { currentCourse } from '$lib/app';
 	const paletteNames: Record<Palette, string> = { gold: 'Gold', petrol: 'Petrol' };
 	let view = $state<'practice' | 'learn' | 'progress'>('practice'),
 		fontReady = $state(false),
@@ -16,7 +17,7 @@
 	let t = $derived(copy[$locale]);
 	onMount(async () => {
 		try {
-			fontReady = (await document.fonts.load('16px Necrofonticon', 'abc')).length > 0;
+			fontReady = (await document.fonts.load(`16px ${currentCourse.fontFamily}`, 'abc')).length > 0;
 		} catch {
 			fontReady = false;
 		}
@@ -42,7 +43,7 @@
 		onclick={(e) => {
 			e.preventDefault();
 			showPractice();
-		}}>NECRO<span>FONTICON</span></a
+		}}>SCRIPT<span>BOUND</span></a
 	>
 	<div class="header-actions">
 		<nav aria-label={t.nav.label}>
@@ -75,7 +76,7 @@
 <main>
 	{#if !fontReady}<aside class="font-notice">
 			<strong>{t.font.title}</strong><span
-				>{t.font.bodyStart} <code>necrofonticon.woff2</code> {t.font.bodyEnd}</span
+				>{t.font.bodyStart} <code>{currentCourse.fontFileName}</code> {t.font.bodyEnd}</span
 			>
 		</aside>{/if}
 	{#if view === 'practice'}<section>
