@@ -4,7 +4,11 @@
 	import { alphabet } from '$lib/content';
 	import { copy } from '$lib/i18n';
 	import { locale } from '$lib/stores/locale';
-	import { progress as progressStore, resetProgress } from '$lib/stores/progress';
+	import {
+		introduceAllGlyphs,
+		progress as progressStore,
+		resetProgress,
+	} from '$lib/stores/progress';
 	import { needsAttention, newGlyphProgress } from '$lib/learning/scheduler';
 	import type { GlyphProgress } from '$lib/types';
 	let { onPracticeMistakes }: { onPracticeMistakes: () => void } = $props();
@@ -25,6 +29,7 @@
 		Object.values($progressStore).reduce((sum, item) => sum + item.encodingCorrect, 0),
 	);
 	let hasProgress = $derived(Object.keys($progressStore).length > 0);
+	let allIntroduced = $derived(alphabet.every((letter) => $progressStore[letter]?.introduced));
 	function confirmReset() {
 		if (window.confirm(t.confirmReset)) resetProgress();
 	}
@@ -62,10 +67,9 @@
 	<p class="privacy">{t.privacy}</p>
 	<div>
 		{#if attention}<button onclick={onPracticeMistakes}>{t.practiceMistakes}</button>{/if}<button
-			class="danger"
-			disabled={!hasProgress}
-			onclick={confirmReset}>{t.reset}</button
-		>
+			disabled={allIntroduced}
+			onclick={() => introduceAllGlyphs(alphabet)}>{t.introduceAll}</button
+		><button class="danger" disabled={!hasProgress} onclick={confirmReset}>{t.reset}</button>
 	</div>
 </div>
 <PhaseThreeControls />
@@ -126,7 +130,7 @@
 		border-color: #74463f;
 		background: #2c1917;
 	}
-	.danger:disabled {
+	.progress-actions button:disabled {
 		cursor: not-allowed;
 		opacity: 0.45;
 	}

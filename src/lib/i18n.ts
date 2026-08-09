@@ -64,6 +64,36 @@ export const copy = {
 			noFilter: 'No progression filter',
 			question: (number: number) => `Question ${number}`,
 			score: (number: number) => `${number} correct`,
+			trial: {
+				tab: 'Trial',
+				eyebrow: 'FLUENCY CHALLENGE',
+				title: 'Glyph Trial',
+				body: 'Identify 20 glyphs as quickly as you can. Every mistake adds two seconds. Trial results do not change mastery.',
+				tier: 'Trial tier',
+				tiers: {
+					initiate: 'Initiate · 6 glyphs',
+					scribe: 'Scribe · 12 glyphs',
+					scholar: 'Scholar · 18 glyphs',
+					master: 'Master · 26 glyphs',
+				},
+				locked: (remaining: number, count: number) =>
+					`Introduce ${remaining} more glyph${remaining === 1 ? '' : 's'} from the first ${count} to unlock this tier.`,
+				best: (time: string) => `Personal best: ${time}`,
+				noBest: 'No completed run yet',
+				start: 'Begin trial',
+				progress: (correct: number, total: number) => `${correct}/${total} correct`,
+				mistakes: (count: number) => `${count} mistake${count === 1 ? '' : 's'}`,
+				combo: (count: number) => `${count}× combo`,
+				choices: 'Latin letter choices. You can also press the matching key.',
+				penalty: '+2.0s',
+				complete: 'Trial complete',
+				newBest: 'New personal best',
+				finalTime: 'Final time',
+				rawTime: (time: string) => `Raw time ${time}`,
+				bestCombo: (count: number) => `Best combo ${count}×`,
+				retry: 'Run again',
+				exit: 'Return to practice',
+			},
 			instructions: {
 				glyph: 'Which Latin letter is this?',
 				word: 'Decode this word',
@@ -125,6 +155,19 @@ export const copy = {
 			extra: 'extra',
 			statuses: { correct: 'correct', wrong: 'wrong', missing: 'missing', extra: 'extra' },
 		},
+		trialUnlockToast: {
+			title: (count: number) =>
+				count === 1 ? 'New Trial tier unlocked' : 'New Trial tiers unlocked',
+			body: (tiers: string[]) =>
+				`You introduced enough glyphs to begin ${new Intl.ListFormat('en').format(tiers)}.`,
+			dismiss: 'Dismiss notification',
+		},
+		wordUnlockToast: {
+			title: (count: number) => `${count} new word${count === 1 ? '' : 's'} available`,
+			body: (count: number) =>
+				`Your new glyph unlocked ${count === 1 ? 'another word' : 'more words'} in Words.`,
+			dismiss: 'Dismiss notification',
+		},
 		progress: {
 			stats: {
 				attempts: 'attempts',
@@ -135,6 +178,7 @@ export const copy = {
 			},
 			privacy: 'Progress is stored only in this browser.',
 			practiceMistakes: 'Practise mistakes',
+			introduceAll: 'Introduce all glyphs',
 			reset: 'Reset progress',
 			confirmReset: 'Reset all practice progress? This cannot be undone.',
 			notScheduled: 'Not scheduled',
@@ -232,6 +276,36 @@ export const copy = {
 			noFilter: 'Kein Fortschrittsfilter',
 			question: (number: number) => `Aufgabe ${number}`,
 			score: (number: number) => `${number} richtig`,
+			trial: {
+				tab: 'Prüfung',
+				eyebrow: 'FLÜSSIGKEITSPRÜFUNG',
+				title: 'Glyphenprüfung',
+				body: 'Bestimme 20 Glyphen so schnell wie möglich. Jeder Fehler kostet zwei Sekunden. Prüfungsergebnisse verändern den Lernstand nicht.',
+				tier: 'Prüfungsstufe',
+				tiers: {
+					initiate: 'Eingeweihte · 6 Glyphen',
+					scribe: 'Schreibkundige · 12 Glyphen',
+					scholar: 'Gelehrte · 18 Glyphen',
+					master: 'Meisterschaft · 26 Glyphen',
+				},
+				locked: (remaining: number, count: number) =>
+					`Führe noch ${remaining} ${remaining === 1 ? 'Glyphe' : 'Glyphen'} der ersten ${count} ein, um diese Stufe freizuschalten.`,
+				best: (time: string) => `Persönlicher Rekord: ${time}`,
+				noBest: 'Noch kein abgeschlossener Lauf',
+				start: 'Prüfung beginnen',
+				progress: (correct: number, total: number) => `${correct}/${total} richtig`,
+				mistakes: (count: number) => `${count} Fehler`,
+				combo: (count: number) => `${count}× Serie`,
+				choices: 'Lateinische Buchstaben. Du kannst auch die passende Taste drücken.',
+				penalty: '+2,0 s',
+				complete: 'Prüfung abgeschlossen',
+				newBest: 'Neuer persönlicher Rekord',
+				finalTime: 'Endzeit',
+				rawTime: (time: string) => `Reine Zeit ${time}`,
+				bestCombo: (count: number) => `Beste Serie ${count}×`,
+				retry: 'Noch einmal',
+				exit: 'Zurück zum Üben',
+			},
 			instructions: {
 				glyph: 'Welcher lateinische Buchstabe ist das?',
 				word: 'Entschlüssle dieses Wort',
@@ -294,6 +368,19 @@ export const copy = {
 			extra: 'zusätzlich',
 			statuses: { correct: 'richtig', wrong: 'falsch', missing: 'fehlt', extra: 'zusätzlich' },
 		},
+		trialUnlockToast: {
+			title: (count: number) =>
+				count === 1 ? 'Neue Prüfungsstufe freigeschaltet' : 'Neue Prüfungsstufen freigeschaltet',
+			body: (tiers: string[]) =>
+				`Du hast genug Glyphen eingeführt, um ${new Intl.ListFormat('de').format(tiers)} zu beginnen.`,
+			dismiss: 'Benachrichtigung schließen',
+		},
+		wordUnlockToast: {
+			title: (count: number) => `${count} neue${count === 1 ? 's Wort' : ' Wörter'} verfügbar`,
+			body: (count: number) =>
+				`Deine neue Glyphe hat unter Wörter ${count === 1 ? 'ein weiteres Wort' : 'weitere Wörter'} freigeschaltet.`,
+			dismiss: 'Benachrichtigung schließen',
+		},
 		progress: {
 			stats: {
 				attempts: 'Versuche',
@@ -304,6 +391,7 @@ export const copy = {
 			},
 			privacy: 'Der Fortschritt wird nur in diesem Browser gespeichert.',
 			practiceMistakes: 'Fehler üben',
+			introduceAll: 'Alle Glyphen einführen',
 			reset: 'Fortschritt zurücksetzen',
 			confirmReset:
 				'Den gesamten Übungsfortschritt zurücksetzen? Dies kann nicht rückgängig gemacht werden.',

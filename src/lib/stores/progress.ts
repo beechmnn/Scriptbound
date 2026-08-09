@@ -77,6 +77,17 @@ export function introduceGlyph(letter: string) {
 		return { ...all, [letter]: { ...old, introduced: true } };
 	});
 }
+export function introduceAllGlyphs(letters: readonly string[]) {
+	progress.update((all) => {
+		const next = { ...all };
+		for (const letter of letters) {
+			if (!/^[a-z]$/.test(letter)) continue;
+			const old = all[letter] ?? newGlyphProgress(letter);
+			next[letter] = old.introduced ? old : { ...old, introduced: true };
+		}
+		return next;
+	});
+}
 export function recordGuidedIntroduction(letter: string, successful: boolean) {
 	if (successful) introduceGlyph(letter);
 }

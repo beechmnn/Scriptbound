@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
 	createProgressBackup,
 	importProgressBackup,
+	introduceAllGlyphs,
 	introduceGlyph,
 	progress,
 	recordAttempt,
@@ -70,6 +71,16 @@ describe('progress recording', () => {
 		expect(saved.introduced).toBe(true);
 		expect(saved.isolatedAttempts).toBe(0);
 		expect(saved.stage).toBe('unseen');
+	});
+
+	it('introduces every supplied glyph without changing existing learning evidence', () => {
+		recordAttempt('a', 'a', 1_000, { mode: 'glyph' });
+		introduceAllGlyphs(['a', 'b', 'c']);
+		const saved = get(progress);
+		expect(Object.keys(saved)).toEqual(['a', 'b', 'c']);
+		expect(saved.a).toMatchObject({ introduced: true, attempts: 1, correct: 1 });
+		expect(saved.b).toMatchObject({ introduced: true, attempts: 0, mastery: 0, stage: 'unseen' });
+		expect(saved.c).toMatchObject({ introduced: true, attempts: 0, mastery: 0, stage: 'unseen' });
 	});
 
 	it('introduces a guided glyph only after a successful repetition', () => {

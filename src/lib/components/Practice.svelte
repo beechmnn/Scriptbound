@@ -17,6 +17,16 @@
 	} from '$lib/stores/progress';
 	import { needsAttention, newGlyphProgress } from '$lib/learning/scheduler';
 	import { createLetterChoices } from '$lib/learning/letter-choices';
+	import {
+		formatGlyphTrialTime,
+		GLYPH_TRIAL_LENGTH,
+		GLYPH_TRIAL_MISTAKE_PENALTY_MS,
+		GLYPH_TRIAL_TIERS,
+		glyphTrialFinalTime,
+		glyphTrialPool,
+		isGlyphTrialTierUnlocked,
+		type GlyphTrialTierId,
+	} from '$lib/learning/glyph-trial';
 	import { createEncodingKeys } from '$lib/learning/encoding-keys';
 	import { scheduleAdaptiveFallback } from '$lib/learning/practice-set';
 	import {
@@ -31,9 +41,27 @@
 		guidedIntroductionLetter,
 		isGuidedIntroductionSuccessful,
 	} from '$lib/learning/adaptive-content';
-	import type { PracticeMode, PracticeSet } from '$lib/types';
-	let { startWithMistakes = false }: { startWithMistakes?: boolean } = $props();
+	import {
+		glyphTrialRecordKey,
+		glyphTrialRecords,
+		saveGlyphTrialRecord,
+	} from '$lib/stores/glyph-trials';
+	import type { Locale, PracticeMode, PracticeSet } from '$lib/types';
+	let {
+		startWithMistakes = false,
+		startWithTrial = false,
+		startWithTrialTier = 'initiate',
+		startWithMode = 'glyph',
+	}: {
+		startWithMistakes?: boolean;
+		startWithTrial?: boolean;
+		startWithTrialTier?: GlyphTrialTierId;
+		startWithMode?: PracticeMode;
+	} = $props();
 	const initialMistakes = untrack(() => startWithMistakes);
+	const initialTrial = untrack(() => startWithTrial);
+	const initialTrialTier = untrack(() => startWithTrialTier);
+	const initialMode = untrack(() => startWithMode);
 	const pick = <T,>(values: T[], previous?: T) => {
 		const choices = values.length > 1 ? values.filter((v) => v !== previous) : values;
 		return choices[Math.floor(Math.random() * choices.length)];
@@ -61,6 +89,24 @@
 		glyphAnswerMethod = $state<'type' | 'buttons'>('type'),
 		letterChoices = $state(createLetterChoices(curricula[$locale][0], alphabet)),
 		encodingKeys = $state(createEncodingKeys(curricula[$locale][0], alphabet));
+	let trialVisible = $state(initialTrial),
+		trialState = $state<'idle' | 'running' | 'complete'>('idle'),
+		selectedTrialTier = $state<GlyphTrialTierId>(initialTrialTier),
+		trialLocale = $state<Locale>('en'),
+		trialPool = $state<string[]>([]),
+		trialTarget = $state(''),
+		trialChoices = $state<string[]>([]),
+		trialWrongChoices = $state<string[]>([]),
+		trialCorrect = $state(0),
+		trialMistakes = $state(0),
+		trialCombo = $state(0),
+		trialBestCombo = $state(0),
+		trialStartedAt = $state(0),
+		trialNow = $state(0),
+		trialRawTime = $state(0),
+		trialFinalTime = $state(0),
+		trialIsPersonalBest = $state(false),
+		trialPenaltyVisible = $state(false);
 	let handwritingHasInk = $state(false),
 		drawingSubmitted = $state(false),
 		handwritingAssessment = $state<'correct' | 'almost' | 'incorrect' | null>(null),
@@ -71,6 +117,7 @@
 		nextPaused = $state(false),
 		wordReturnScrollTop = $state<number | null>(null),
 		nextTimer: ReturnType<typeof setInterval> | undefined,
+		trialTimer: ReturnType<typeof setInterval> | undefined,
 		attentionFallbackTimer: ReturnType<typeof setTimeout> | undefined;
 	let options = $derived<{ value: PracticeMode; label: string }[]>([
 			{ value: 'glyph', label: t.modes.glyph },
@@ -79,6 +126,12 @@
 		]),
 		simplifiedResult = $derived(
 			mode === 'word' || mode === 'encode' || (mode === 'glyph' && glyphAnswerMethod === 'buttons'),
+		),
+		selectedTrialGlyphCount = $derived(
+			GLYPH_TRIAL_TIERS.find((tier) => tier.id === selectedTrialTier)?.glyphCount ?? 6,
+		),
+		currentTrialRecord = $derived(
+			$glyphTrialRecords[glyphTrialRecordKey($locale, selectedTrialTier)],
 		);
 	function weakLetters() {
 		return alphabet.filter((letter) => $progress[letter] && needsAttention($progress[letter]));
@@ -304,7 +357,97 @@
 		nextCountdown = 0;
 		nextPaused = false;
 	}
+	function clearTrialTimer() {
+		if (trialTimer) clearInterval(trialTimer);
+		trialTimer = undefined;
+	}
+	function exitTrial() {
+		clearTrialTimer();
+		trialState = 'idle';
+		trialPenaltyVisible = false;
+		focusAnswer();
+	}
+	function showTrial() {
+		clearNextTimer();
+		trialVisible = true;
+		if (trialState !== 'idle') exitTrial();
+	}
+	function returnToPractice() {
+		exitTrial();
+		trialVisible = false;
+	}
+	function trialTierUnlocked(tierId: GlyphTrialTierId) {
+		return isGlyphTrialTierUnlocked(curriculum, $progress, tierId);
+	}
+	function trialTierRemaining(tierId: GlyphTrialTierId) {
+		return glyphTrialPool(curriculum, tierId).filter((letter) => !$progress[letter]?.introduced)
+			.length;
+	}
+	function nextTrialPrompt(previous?: string) {
+		trialTarget = pick(trialPool, previous);
+		trialChoices = createLetterChoices(trialTarget, trialPool);
+		trialWrongChoices = [];
+		trialPenaltyVisible = false;
+	}
+	function startTrial() {
+		if (!trialTierUnlocked(selectedTrialTier)) return;
+		clearNextTimer();
+		clearTrialTimer();
+		trialLocale = $locale;
+		trialPool = glyphTrialPool(curriculum, selectedTrialTier);
+		trialCorrect = 0;
+		trialMistakes = 0;
+		trialCombo = 0;
+		trialBestCombo = 0;
+		trialRawTime = 0;
+		trialFinalTime = 0;
+		trialIsPersonalBest = false;
+		trialState = 'running';
+		nextTrialPrompt();
+		trialStartedAt = Date.now();
+		trialNow = trialStartedAt;
+		trialTimer = setInterval(() => (trialNow = Date.now()), 100);
+	}
+	function completeTrial() {
+		trialRawTime = Date.now() - trialStartedAt;
+		trialFinalTime = glyphTrialFinalTime(trialRawTime, trialMistakes);
+		trialNow = Date.now();
+		clearTrialTimer();
+		trialIsPersonalBest = saveGlyphTrialRecord(trialLocale, selectedTrialTier, {
+			finalTimeMs: trialFinalTime,
+			rawTimeMs: trialRawTime,
+			mistakes: trialMistakes,
+			bestCombo: trialBestCombo,
+			completedAt: Date.now(),
+		});
+		trialState = 'complete';
+	}
+	function submitTrialLetter(letter: string) {
+		if (trialState !== 'running' || trialWrongChoices.includes(letter)) return;
+		if (letter !== trialTarget) {
+			trialMistakes++;
+			trialCombo = 0;
+			trialWrongChoices = [...trialWrongChoices, letter];
+			trialPenaltyVisible = true;
+			trialNow = Date.now();
+			return;
+		}
+		trialCorrect++;
+		trialCombo++;
+		trialBestCombo = Math.max(trialBestCombo, trialCombo);
+		if (trialCorrect >= GLYPH_TRIAL_LENGTH) completeTrial();
+		else nextTrialPrompt(trialTarget);
+	}
+	function handleTrialKeydown(event: KeyboardEvent) {
+		if (trialState !== 'running' || event.metaKey || event.ctrlKey || event.altKey) return;
+		const letter = event.key.toLowerCase();
+		if (!trialChoices.includes(letter)) return;
+		event.preventDefault();
+		submitTrialLetter(letter);
+	}
 	function reset(nextMode?: PracticeMode) {
+		if (trialState !== 'idle') exitTrial();
+		trialVisible = false;
 		clearNextTimer();
 		if (nextMode === 'word') wordAutoFocusEnabled = false;
 		if (nextMode && nextMode !== mode) {
@@ -466,308 +609,562 @@
 	}
 	onMount(() => {
 		if (window.matchMedia('(max-width: 620px)').matches) glyphAnswerMethod = 'buttons';
-		prepareTargetIntroduction();
-		focusAnswer();
+		window.addEventListener('keydown', handleTrialKeydown);
+		if (initialMode !== 'glyph' && !initialTrial) reset(initialMode);
+		else {
+			prepareTargetIntroduction();
+			focusAnswer();
+		}
 	});
 	onDestroy(() => {
 		clearNextTimer();
+		clearTrialTimer();
+		if (typeof window !== 'undefined') window.removeEventListener('keydown', handleTrialKeydown);
 		if (attentionFallbackTimer) clearTimeout(attentionFallbackTimer);
 	});
 </script>
 
 <div class="mode-tabs" role="group" aria-label={t.modeLabel}>
 	{#each options as option}<button
-			class:active={mode === option.value}
+			class:active={!trialVisible && mode === option.value}
 			onclick={() => reset(option.value)}>{option.label}</button
 		>{/each}
+	<button class:active={trialVisible} onclick={showTrial}>{t.trial.tab}</button>
 </div>
-<div class="practice-settings">
-	<label for="practice-set">{t.questionSet}</label><select
-		id="practice-set"
-		value={practiceSet}
-		onchange={(event) => changeSet(event.currentTarget.value as PracticeSet)}
-		><option value="adaptive">{t.sets.adaptive}</option><option value="all">{t.sets.all}</option
-		></select
-	>{#if practiceSet !== 'adaptive' || mode === 'glyph' || mode === 'encode'}<span
-			>{practiceSet === 'adaptive'
-				? (mode === 'encode' ? t.introducedEncoding : t.introduced)(
-						curriculum.filter((letter) => $progress[letter]?.introduced).length,
-					)
-				: practiceSet === 'mistakes'
-					? t.attention(weakLetters().length)
-					: t.noFilter}</span
-		>{/if}
-</div>
-<div
-	class="practice-card"
-	class:word-mode={mode === 'word'}
-	class:simplified-result={simplifiedResult && submitted}
-	class:success={simplifiedResult && submitted && correct}
-	class:error={simplifiedResult && submitted && !correct}
->
-	<div class:simplified-result-meta={simplifiedResult} class="session-meta">
-		<span>{t.question(question)}</span>
-		{#if simplifiedResult}<span
-				class:visible={submitted}
-				class:success={submitted && correct}
-				class:error={submitted && !correct}
-				class="result-icon"
-				role={submitted ? 'status' : undefined}
-				aria-label={submitted
-					? correct
-						? t.correct
-						: revealed
-							? t.revealed
-							: t.notQuite
-					: undefined}
-				aria-hidden={submitted ? undefined : 'true'}>{submitted ? (correct ? '✓' : '×') : '✓'}</span
+{#if !trialVisible}
+	<div class="practice-settings">
+		<label for="practice-set">{t.questionSet}</label><select
+			id="practice-set"
+			value={practiceSet}
+			onchange={(event) => changeSet(event.currentTarget.value as PracticeSet)}
+			><option value="adaptive">{t.sets.adaptive}</option><option value="all">{t.sets.all}</option
+			></select
+		>{#if practiceSet !== 'adaptive' || mode === 'glyph' || mode === 'encode'}<span
+				>{practiceSet === 'adaptive'
+					? (mode === 'encode' ? t.introducedEncoding : t.introduced)(
+							curriculum.filter((letter) => $progress[letter]?.introduced).length,
+						)
+					: practiceSet === 'mistakes'
+						? t.attention(weakLetters().length)
+						: t.noFilter}</span
 			>{/if}
-		<span>{t.score(score)}</span>
 	</div>
-	<p class="instruction">{t.instructions[mode]}</p>
-	<div
-		class="practice-stage"
-		class:glyph-stage={mode === 'glyph'}
-		class:encode-stage={mode === 'encode'}
-	>
-		{#if noAdaptiveWord}
-			<section class="empty-practice" role="status">
-				<h2>{t.noAdaptiveWord.title}</h2>
-				<p>{t.noAdaptiveWord.body}</p>
-			</section>
-		{:else if introductionPending && introducedGlyph}
-			<GlyphIntroduction
-				letter={introducedGlyph}
-				eyebrow={t.glyphIntroduction.eyebrow}
-				title={t.glyphIntroduction.title(introducedGlyph)}
-				body={t.glyphIntroduction.body}
-				continueLabel={t.glyphIntroduction.continue[mode as 'glyph' | 'word' | 'encode']}
-				onContinue={beginGuidedPractice}
-			/>
-		{:else}
-			{#if mode === 'encode' || mode === 'handwriting'}
-				<div class="latin-prompt">
-					<span>{mode === 'handwriting' ? target.toUpperCase() : target}</span>
-					{#if mode === 'encode' && submitted && !correct}<div
-							class="encoding-feedback-overlay error"
-							role="status"
-							aria-label={t.expected(target)}
+{/if}
+{#if trialVisible && trialState === 'idle'}
+	<section class="trial-launcher" aria-labelledby="glyph-trial-title">
+		<div>
+			<p class="eyebrow">{t.trial.eyebrow}</p>
+			<h2 id="glyph-trial-title">{t.trial.title}</h2>
+			<p>{t.trial.body}</p>
+		</div>
+		<div class="trial-launcher-controls">
+			<label for="trial-tier">{t.trial.tier}</label>
+			<select id="trial-tier" bind:value={selectedTrialTier}>
+				{#each GLYPH_TRIAL_TIERS as tier}
+					<option value={tier.id}>{t.trial.tiers[tier.id]}</option>
+				{/each}
+			</select>
+			<small class:locked={!trialTierUnlocked(selectedTrialTier)}>
+				{#if trialTierUnlocked(selectedTrialTier)}
+					{currentTrialRecord
+						? t.trial.best(formatGlyphTrialTime(currentTrialRecord.finalTimeMs))
+						: t.trial.noBest}
+				{:else}
+					{t.trial.locked(trialTierRemaining(selectedTrialTier), selectedTrialGlyphCount)}
+				{/if}
+			</small>
+			<button type="button" disabled={!trialTierUnlocked(selectedTrialTier)} onclick={startTrial}>
+				{t.trial.start}
+			</button>
+		</div>
+	</section>
+{/if}
+{#if trialVisible}
+	{#if trialState !== 'idle'}
+		<section class="practice-card trial-card" aria-labelledby="active-glyph-trial-title">
+			{#if trialState === 'running'}
+				<div class="trial-meta" aria-live="polite">
+					<span>{t.trial.progress(trialCorrect, GLYPH_TRIAL_LENGTH)}</span>
+					<strong
+						>{formatGlyphTrialTime(
+							trialNow - trialStartedAt + trialMistakes * GLYPH_TRIAL_MISTAKE_PENALTY_MS,
+						)}</strong
+					>
+					<span>{t.trial.mistakes(trialMistakes)}</span>
+				</div>
+				<div class="trial-heading">
+					<div>
+						<p class="eyebrow">{t.trial.tiers[selectedTrialTier]}</p>
+						<h2 id="active-glyph-trial-title">{t.trial.title}</h2>
+					</div>
+					<strong class="trial-combo">{t.trial.combo(trialCombo)}</strong>
+				</div>
+				<div class="trial-prompt"><GlyphText text={trialTarget} /></div>
+				<div class="trial-choices" aria-label={t.trial.choices}>
+					{#each trialChoices as letter}
+						<button
+							type="button"
+							disabled={trialWrongChoices.includes(letter)}
+							class:incorrect={trialWrongChoices.includes(letter)}
+							onclick={() => submitTrialLetter(letter)}>{letter.toUpperCase()}</button
 						>
-							<div class="encoding-reference">
-								{#each encodingReferenceWords() as word}<span
-										class="encoding-reference-word"
-										aria-hidden="true"
-									>
-										{#each word as character}<span
-												class:correct={character.correct}
-												class:incorrect={!character.correct}
-												class="encoding-reference-character"
-												><b>{character.letter.toUpperCase()}</b><GlyphText
-													text={character.letter}
-												/></span
-											>{/each}
-									</span>{/each}
-							</div>
-						</div>{/if}
+					{/each}
+				</div>
+				<div class="trial-running-footer">
+					<span class:visible={trialPenaltyVisible} class="trial-penalty" role="status">
+						{t.trial.penalty}
+					</span>
+					<button type="button" class="secondary" onclick={returnToPractice}>{t.trial.exit}</button>
 				</div>
 			{:else}
-				<div class:long={mode !== 'glyph'} class="prompt">
-					<GlyphText text={target} />
-					{#if mode === 'word' && submitted && !correct}<div
-							class="encoding-feedback-overlay error"
-							role="status"
-							aria-label={t.expected(target)}
+				<div class="trial-results" role="status">
+					<p class="eyebrow">{t.trial.complete}</p>
+					<h2 id="active-glyph-trial-title">
+						{trialIsPersonalBest ? t.trial.newBest : t.trial.finalTime}
+					</h2>
+					<strong class="trial-final-time">{formatGlyphTrialTime(trialFinalTime)}</strong>
+					<div class="trial-result-details">
+						<span>{t.trial.rawTime(formatGlyphTrialTime(trialRawTime))}</span>
+						<span>{t.trial.mistakes(trialMistakes)}</span>
+						<span>{t.trial.bestCombo(trialBestCombo)}</span>
+					</div>
+					<div class="actions">
+						<button type="button" class="secondary" onclick={returnToPractice}
+							>{t.trial.exit}</button
 						>
-							<div class="encoding-reference">
-								{#each encodingReferenceWords() as word}<span
-										class="encoding-reference-word"
-										aria-hidden="true"
-									>
-										{#each word as character}<span
-												class:correct={character.correct}
-												class:incorrect={!character.correct}
-												class="encoding-reference-character"
-												><b>{character.letter.toUpperCase()}</b><GlyphText
-													text={character.letter}
-												/></span
-											>{/each}
-									</span>{/each}
-							</div>
-						</div>{/if}
+						<button type="button" onclick={startTrial}>{t.trial.retry}</button>
+					</div>
 				</div>
 			{/if}
-			<form
-				onsubmit={(event) => {
-					event.preventDefault();
-					submitted ? next() : submit();
-				}}
-			>
-				{#if mode === 'handwriting'}
-					{#key question}<HandwritingPad
-							reference={drawingSubmitted ? target : undefined}
-							{overlayOpacity}
-							disabled={drawingSubmitted}
-							label={t.handwriting.canvas}
-							undoLabel={t.handwriting.undo}
-							clearLabel={t.handwriting.clear}
-							onChange={(hasInk: boolean) => (handwritingHasInk = hasInk)}
-						/>{/key}
-					{#if drawingSubmitted}
-						<label class="overlay-control">
-							<span>{t.handwriting.overlay}</span>
-							<input type="range" min="0.1" max="0.9" step="0.05" bind:value={overlayOpacity} />
-						</label>
-					{/if}
-					{#if drawingSubmitted && !handwritingAssessment}
-						<fieldset class="self-assessment">
-							<legend>{t.handwriting.assess}</legend>
-							<div>
-								<button type="button" onclick={() => assessHandwriting('incorrect')}
-									>{t.handwriting.incorrect}</button
-								>
-								<button type="button" onclick={() => assessHandwriting('almost')}
-									>{t.handwriting.almost}</button
-								>
-								<button type="button" onclick={() => assessHandwriting('correct')}
-									>{t.handwriting.correct}</button
-								>
-							</div>
-						</fieldset>
-					{/if}
-					{#if handwritingAssessment}
-						<div
-							class:success={handwritingAssessment === 'correct'}
-							class:error={handwritingAssessment !== 'correct'}
-							class="feedback"
-							role="status"
-						>
-							<strong>{t.handwriting.results[handwritingAssessment]}</strong>
-						</div>
-						<div class="next-indicator" aria-live="polite">
-							<span>{t.next(nextCountdown)}</span>
-							<div class="countdown-track"><i style:animation-duration={`${nextDelay}s`}></i></div>
-						</div>
-					{/if}
-					<div class="actions">
-						{#if !drawingSubmitted}<button
-								type="button"
-								disabled={!handwritingHasInk}
-								onclick={submitDrawing}>{t.handwriting.submit}</button
+		</section>
+	{/if}
+{:else}
+	<div
+		class="practice-card"
+		class:word-mode={mode === 'word'}
+		class:simplified-result={simplifiedResult && submitted}
+		class:success={simplifiedResult && submitted && correct}
+		class:error={simplifiedResult && submitted && !correct}
+	>
+		<div class:simplified-result-meta={simplifiedResult} class="session-meta">
+			<span>{t.question(question)}</span>
+			{#if simplifiedResult}<span
+					class:visible={submitted}
+					class:success={submitted && correct}
+					class:error={submitted && !correct}
+					class="result-icon"
+					role={submitted ? 'status' : undefined}
+					aria-label={submitted
+						? correct
+							? t.correct
+							: revealed
+								? t.revealed
+								: t.notQuite
+						: undefined}
+					aria-hidden={submitted ? undefined : 'true'}
+					>{submitted ? (correct ? '✓' : '×') : '✓'}</span
+				>{/if}
+			<span>{t.score(score)}</span>
+		</div>
+		<p class="instruction">{t.instructions[mode]}</p>
+		<div
+			class="practice-stage"
+			class:glyph-stage={mode === 'glyph'}
+			class:encode-stage={mode === 'encode'}
+		>
+			{#if noAdaptiveWord}
+				<section class="empty-practice" role="status">
+					<h2>{t.noAdaptiveWord.title}</h2>
+					<p>{t.noAdaptiveWord.body}</p>
+				</section>
+			{:else if introductionPending && introducedGlyph}
+				<GlyphIntroduction
+					letter={introducedGlyph}
+					eyebrow={t.glyphIntroduction.eyebrow}
+					title={t.glyphIntroduction.title(introducedGlyph)}
+					body={t.glyphIntroduction.body}
+					continueLabel={t.glyphIntroduction.continue[mode as 'glyph' | 'word' | 'encode']}
+					onContinue={beginGuidedPractice}
+				/>
+			{:else}
+				{#if mode === 'encode' || mode === 'handwriting'}
+					<div class="latin-prompt">
+						<span>{mode === 'handwriting' ? target.toUpperCase() : target}</span>
+						{#if mode === 'encode' && submitted && !correct}<div
+								class="encoding-feedback-overlay error"
+								role="status"
+								aria-label={t.expected(target)}
 							>
-						{:else if handwritingAssessment}<button type="button" onclick={next}
-								>{t.nextButton}</button
-							>
-						{/if}
+								<div class="encoding-reference">
+									{#each encodingReferenceWords() as word}<span
+											class="encoding-reference-word"
+											aria-hidden="true"
+										>
+											{#each word as character}<span
+													class:correct={character.correct}
+													class:incorrect={!character.correct}
+													class="encoding-reference-character"
+													><b>{character.letter.toUpperCase()}</b><GlyphText
+														text={character.letter}
+													/></span
+												>{/each}
+										</span>{/each}
+								</div>
+							</div>{/if}
 					</div>
 				{:else}
-					{#if mode === 'glyph'}<fieldset class="answer-method">
-							<legend>{t.answerMethod.label}</legend>
-							<div class="answer-method-options">
-								<button
-									type="button"
-									disabled={submitted}
-									class:active={glyphAnswerMethod === 'type'}
-									aria-pressed={glyphAnswerMethod === 'type'}
-									onclick={() => changeGlyphAnswerMethod('type')}>{t.answerMethod.type}</button
-								><button
-									type="button"
-									disabled={submitted}
-									class:active={glyphAnswerMethod === 'buttons'}
-									aria-pressed={glyphAnswerMethod === 'buttons'}
-									onclick={() => changeGlyphAnswerMethod('buttons')}
-									>{t.answerMethod.buttons}</button
-								>
-							</div>
-						</fieldset>{/if}
-					{#if mode === 'encode'}
-						<span class="answer-label" id="encoded-answer-label">{t.answer}</span>
-						<div
-							class="encoded-answer"
-							role="textbox"
-							aria-label={`${t.answer}. ${t.encodedAnswer(answer.length)}`}
-						>
-							{#if answer}<GlyphText text={answer} />{:else}<span aria-hidden="true">—</span>{/if}
-						</div>
-						{#key question}<GlyphKeyboard
-								keys={encodingKeys}
-								disabled={submitted}
-								allowSpace={target.includes(' ')}
-								onLetter={appendGlyph}
-								onBackspace={backspaceGlyph}
-								onClear={clearGlyphs}
-								onSpace={appendSpace}
-							/>{/key}
-					{:else if mode !== 'glyph' || glyphAnswerMethod === 'type'}<label for="answer"
-							>{t.answer}</label
-						><input
-							id="answer"
-							bind:this={answerInput}
-							bind:value={answer}
-							oninput={handleAnswerInput}
-							onbeforeinput={preventSubmittedAnswerInput}
-							maxlength={mode === 'glyph' ? 1 : undefined}
-							disabled={answerInputDisabled(mode, submitted)}
-							aria-disabled={submitted}
-							autocomplete="off"
-							autocapitalize="none"
-							spellcheck="false"
-						/>
-					{:else}<div class="letter-choices" aria-label={t.answerMethod.letters}>
-							{#each letterChoices as letter}<button
-									type="button"
-									disabled={submitted}
-									class:selected={answer === letter}
-									class:correct-answer={submitted && letter === target}
-									class:incorrect-answer={submitted && !correct && letter === answer}
-									onclick={() => submitLetter(letter)}>{letter.toUpperCase()}</button
-								>{/each}
-						</div>{/if}
-					{#if submitted && (correct || mode !== 'encode') && !simplifiedResult}<div
-							class:success={correct}
-							class:error={!correct}
-							class="feedback"
-							role="status"
-						>
-							<div class="feedback-heading">
-								<span class="feedback-icon" aria-hidden="true">{correct ? '✓' : '×'}</span>
-								<strong>{correct ? t.correct : revealed ? t.revealed : t.notQuite}</strong>
-							</div>
-							{#if !correct}<span>{t.expected(target)}</span>{#if !revealed}<AnswerComparison
-										{answer}
-										expected={target}
-									/>{/if}{/if}
-						</div>{/if}
-					{#if submitted || simplifiedResult}<div
-							class:simplified-countdown={simplifiedResult}
-							class="next-indicator"
-							aria-live={submitted ? 'polite' : undefined}
-						>
-							{#if submitted}<div class="countdown-heading">
-									<span>{t.next(nextCountdown)}</span>
-									{#if !correct}<button
-											type="button"
-											class="secondary countdown-toggle"
-											onclick={toggleNextPause}>{nextPaused ? t.resume : t.pause}</button
-										>{/if}
+					<div class:long={mode !== 'glyph'} class="prompt">
+						<GlyphText text={target} />
+						{#if mode === 'word' && submitted && !correct}<div
+								class="encoding-feedback-overlay error"
+								role="status"
+								aria-label={t.expected(target)}
+							>
+								<div class="encoding-reference">
+									{#each encodingReferenceWords() as word}<span
+											class="encoding-reference-word"
+											aria-hidden="true"
+										>
+											{#each word as character}<span
+													class:correct={character.correct}
+													class:incorrect={!character.correct}
+													class="encoding-reference-character"
+													><b>{character.letter.toUpperCase()}</b><GlyphText
+														text={character.letter}
+													/></span
+												>{/each}
+										</span>{/each}
 								</div>
-								<div class="countdown-track">
-									<i class:paused={nextPaused} style:animation-duration={`${nextDelay}s`}></i>
-								</div>{/if}
-						</div>{/if}
-					<div class="actions">
-						{#if !submitted}<button type="button" class="secondary" onclick={reveal}
-								>{t.reveal}</button
-							>{/if}{#if submitted || mode !== 'glyph' || glyphAnswerMethod === 'type'}<button
-								type="submit">{submitted ? t.nextButton : t.check}</button
-							>{/if}
+							</div>{/if}
 					</div>
 				{/if}
-			</form>
-		{/if}
+				<form
+					onsubmit={(event) => {
+						event.preventDefault();
+						submitted ? next() : submit();
+					}}
+				>
+					{#if mode === 'handwriting'}
+						{#key question}<HandwritingPad
+								reference={drawingSubmitted ? target : undefined}
+								{overlayOpacity}
+								disabled={drawingSubmitted}
+								label={t.handwriting.canvas}
+								undoLabel={t.handwriting.undo}
+								clearLabel={t.handwriting.clear}
+								onChange={(hasInk: boolean) => (handwritingHasInk = hasInk)}
+							/>{/key}
+						{#if drawingSubmitted}
+							<label class="overlay-control">
+								<span>{t.handwriting.overlay}</span>
+								<input type="range" min="0.1" max="0.9" step="0.05" bind:value={overlayOpacity} />
+							</label>
+						{/if}
+						{#if drawingSubmitted && !handwritingAssessment}
+							<fieldset class="self-assessment">
+								<legend>{t.handwriting.assess}</legend>
+								<div>
+									<button type="button" onclick={() => assessHandwriting('incorrect')}
+										>{t.handwriting.incorrect}</button
+									>
+									<button type="button" onclick={() => assessHandwriting('almost')}
+										>{t.handwriting.almost}</button
+									>
+									<button type="button" onclick={() => assessHandwriting('correct')}
+										>{t.handwriting.correct}</button
+									>
+								</div>
+							</fieldset>
+						{/if}
+						{#if handwritingAssessment}
+							<div
+								class:success={handwritingAssessment === 'correct'}
+								class:error={handwritingAssessment !== 'correct'}
+								class="feedback"
+								role="status"
+							>
+								<strong>{t.handwriting.results[handwritingAssessment]}</strong>
+							</div>
+							<div class="next-indicator" aria-live="polite">
+								<span>{t.next(nextCountdown)}</span>
+								<div class="countdown-track">
+									<i style:animation-duration={`${nextDelay}s`}></i>
+								</div>
+							</div>
+						{/if}
+						<div class="actions">
+							{#if !drawingSubmitted}<button
+									type="button"
+									disabled={!handwritingHasInk}
+									onclick={submitDrawing}>{t.handwriting.submit}</button
+								>
+							{:else if handwritingAssessment}<button type="button" onclick={next}
+									>{t.nextButton}</button
+								>
+							{/if}
+						</div>
+					{:else}
+						{#if mode === 'glyph'}<fieldset class="answer-method">
+								<legend>{t.answerMethod.label}</legend>
+								<div class="answer-method-options">
+									<button
+										type="button"
+										disabled={submitted}
+										class:active={glyphAnswerMethod === 'type'}
+										aria-pressed={glyphAnswerMethod === 'type'}
+										onclick={() => changeGlyphAnswerMethod('type')}>{t.answerMethod.type}</button
+									><button
+										type="button"
+										disabled={submitted}
+										class:active={glyphAnswerMethod === 'buttons'}
+										aria-pressed={glyphAnswerMethod === 'buttons'}
+										onclick={() => changeGlyphAnswerMethod('buttons')}
+										>{t.answerMethod.buttons}</button
+									>
+								</div>
+							</fieldset>{/if}
+						{#if mode === 'encode'}
+							<span class="answer-label" id="encoded-answer-label">{t.answer}</span>
+							<div
+								class="encoded-answer"
+								role="textbox"
+								aria-label={`${t.answer}. ${t.encodedAnswer(answer.length)}`}
+							>
+								{#if answer}<GlyphText text={answer} />{:else}<span aria-hidden="true">—</span>{/if}
+							</div>
+							{#key question}<GlyphKeyboard
+									keys={encodingKeys}
+									disabled={submitted}
+									allowSpace={target.includes(' ')}
+									onLetter={appendGlyph}
+									onBackspace={backspaceGlyph}
+									onClear={clearGlyphs}
+									onSpace={appendSpace}
+								/>{/key}
+						{:else if mode !== 'glyph' || glyphAnswerMethod === 'type'}<label for="answer"
+								>{t.answer}</label
+							><input
+								id="answer"
+								bind:this={answerInput}
+								bind:value={answer}
+								oninput={handleAnswerInput}
+								onbeforeinput={preventSubmittedAnswerInput}
+								maxlength={mode === 'glyph' ? 1 : undefined}
+								disabled={answerInputDisabled(mode, submitted)}
+								aria-disabled={submitted}
+								autocomplete="off"
+								autocapitalize="none"
+								spellcheck="false"
+							/>
+						{:else}<div class="letter-choices" aria-label={t.answerMethod.letters}>
+								{#each letterChoices as letter}<button
+										type="button"
+										disabled={submitted}
+										class:selected={answer === letter}
+										class:correct-answer={submitted && letter === target}
+										class:incorrect-answer={submitted && !correct && letter === answer}
+										onclick={() => submitLetter(letter)}>{letter.toUpperCase()}</button
+									>{/each}
+							</div>{/if}
+						{#if submitted && (correct || mode !== 'encode') && !simplifiedResult}<div
+								class:success={correct}
+								class:error={!correct}
+								class="feedback"
+								role="status"
+							>
+								<div class="feedback-heading">
+									<span class="feedback-icon" aria-hidden="true">{correct ? '✓' : '×'}</span>
+									<strong>{correct ? t.correct : revealed ? t.revealed : t.notQuite}</strong>
+								</div>
+								{#if !correct}<span>{t.expected(target)}</span>{#if !revealed}<AnswerComparison
+											{answer}
+											expected={target}
+										/>{/if}{/if}
+							</div>{/if}
+						{#if submitted || simplifiedResult}<div
+								class:simplified-countdown={simplifiedResult}
+								class="next-indicator"
+								aria-live={submitted ? 'polite' : undefined}
+							>
+								{#if submitted}<div class="countdown-heading">
+										<span>{t.next(nextCountdown)}</span>
+										{#if !correct}<button
+												type="button"
+												class="secondary countdown-toggle"
+												onclick={toggleNextPause}>{nextPaused ? t.resume : t.pause}</button
+											>{/if}
+									</div>
+									<div class="countdown-track">
+										<i class:paused={nextPaused} style:animation-duration={`${nextDelay}s`}></i>
+									</div>{/if}
+							</div>{/if}
+						<div class="actions">
+							{#if !submitted}<button type="button" class="secondary" onclick={reveal}
+									>{t.reveal}</button
+								>{/if}{#if submitted || mode !== 'glyph' || glyphAnswerMethod === 'type'}<button
+									type="submit">{submitted ? t.nextButton : t.check}</button
+								>{/if}
+						</div>
+					{/if}
+				</form>
+			{/if}
+		</div>
 	</div>
-</div>
+{/if}
 
 <style>
+	.trial-launcher {
+		display: grid;
+		grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
+		gap: 1.5rem;
+		margin-bottom: 1rem;
+		padding: 1.25rem;
+		border: 1px solid var(--line);
+		border-left: 3px solid var(--accent);
+		border-radius: 0.45rem;
+		background: var(--panel);
+	}
+	.trial-launcher h2,
+	.trial-launcher p,
+	.trial-heading h2,
+	.trial-heading p,
+	.trial-results h2,
+	.trial-results p {
+		margin: 0;
+	}
+	.trial-launcher > div:first-child {
+		display: grid;
+		align-content: center;
+		gap: 0.45rem;
+	}
+	.trial-launcher > div:first-child > p:last-child {
+		max-width: 48rem;
+		color: var(--muted);
+	}
+	.trial-launcher-controls {
+		display: grid;
+		gap: 0.45rem;
+	}
+	.trial-launcher-controls label,
+	.trial-launcher-controls small {
+		color: var(--muted);
+		font-size: 0.8rem;
+	}
+	.trial-launcher-controls small.locked {
+		color: #efa095;
+		font-weight: 650;
+	}
+	.trial-launcher-controls select {
+		width: 100%;
+		padding: 0.65rem;
+		border: 1px solid var(--line);
+		border-radius: 0.4rem;
+		color: var(--ink);
+		background: var(--field);
+	}
+	.trial-launcher-controls button {
+		margin-top: 0.25rem;
+	}
+	.trial-launcher-controls button:disabled {
+		cursor: not-allowed;
+		filter: grayscale(0.75);
+		opacity: 0.38;
+	}
+	.trial-card {
+		min-height: 34rem;
+	}
+	.trial-meta {
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: center;
+		gap: 1rem;
+		color: var(--muted);
+		font-size: 0.8rem;
+	}
+	.trial-meta strong {
+		color: var(--accent);
+		font:
+			500 1.8rem/1 Georgia,
+			serif;
+	}
+	.trial-meta > :last-child {
+		text-align: right;
+	}
+	.trial-heading {
+		display: flex;
+		align-items: end;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-top: 1.5rem;
+	}
+	.trial-combo {
+		color: var(--accent);
+		font-size: 1.1rem;
+	}
+	.trial-prompt {
+		display: grid;
+		min-height: 12rem;
+		place-items: center;
+		font-size: clamp(5rem, 16vw, 9rem);
+	}
+	.trial-choices {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 0.75rem;
+		max-width: 38rem;
+		margin: 0 auto;
+	}
+	.trial-choices button {
+		min-width: 0;
+		min-height: 4rem;
+		font-size: 1.1rem;
+		font-weight: 700;
+	}
+	.trial-choices button.incorrect {
+		color: #fff1ef;
+		border-color: #efa095;
+		background: #8f3f36;
+		opacity: 0.7;
+	}
+	.trial-running-footer {
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: center;
+		margin-top: 1.25rem;
+	}
+	.trial-running-footer button {
+		grid-column: 2;
+	}
+	.trial-penalty {
+		grid-column: 1;
+		visibility: hidden;
+		color: #efa095;
+		font-weight: 700;
+	}
+	.trial-penalty.visible {
+		visibility: visible;
+	}
+	.trial-results {
+		display: grid;
+		min-height: 29rem;
+		place-content: center;
+		justify-items: center;
+		gap: 0.8rem;
+		text-align: center;
+	}
+	.trial-final-time {
+		color: var(--accent);
+		font:
+			500 clamp(4rem, 12vw, 7rem) / 1 Georgia,
+			serif;
+	}
+	.trial-result-details {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.4rem 1.2rem;
+		color: var(--muted);
+	}
 	.practice-settings {
 		display: grid;
 		grid-template-columns: auto minmax(180px, 1fr) auto;
@@ -1075,6 +1472,9 @@
 		}
 	}
 	@media (max-width: 760px) {
+		.trial-launcher {
+			grid-template-columns: 1fr;
+		}
 		.mode-tabs {
 			display: grid;
 			grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1091,6 +1491,18 @@
 		}
 		.self-assessment > div {
 			grid-template-columns: 1fr;
+		}
+	}
+	@media (max-width: 520px) {
+		.trial-choices {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.trial-meta {
+			gap: 0.5rem;
+		}
+		.trial-heading {
+			align-items: start;
+			flex-direction: column;
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {

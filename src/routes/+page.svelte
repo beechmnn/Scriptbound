@@ -3,16 +3,21 @@
 	import Practice from '$lib/components/Practice.svelte';
 	import ProgressDashboard from '$lib/components/ProgressDashboard.svelte';
 	import PwaStatus from '$lib/components/PwaStatus.svelte';
+	import TrialUnlockToast from '$lib/components/TrialUnlockToast.svelte';
 	import { onMount } from 'svelte';
 	import { copy, localeNames } from '$lib/i18n';
 	import { locale, setLocale } from '$lib/stores/locale';
 	import { palette, setPalette } from '$lib/stores/palette';
-	import type { Locale, Palette } from '$lib/types';
+	import type { Locale, Palette, PracticeMode } from '$lib/types';
 	import { currentCourse } from '$lib/app';
+	import type { GlyphTrialTierId } from '$lib/learning/glyph-trial';
 	const paletteNames: Record<Palette, string> = { gold: 'Gold', petrol: 'Petrol' };
 	let view = $state<'practice' | 'learn' | 'progress'>('practice'),
 		fontReady = $state(false),
 		practiceMistakes = $state(false),
+		practiceTrial = $state(false),
+		practiceTrialTier = $state<GlyphTrialTierId>('initiate'),
+		practiceMode = $state<PracticeMode>('glyph'),
 		practiceKey = $state(0);
 	let t = $derived(copy[$locale]);
 	onMount(async () => {
@@ -23,8 +28,18 @@
 		}
 		document.documentElement.classList.add(fontReady ? 'font-loaded' : 'font-pending');
 	});
-	function showPractice(mistakes = false) {
+	function showPractice(mistakes = false, trialTier?: GlyphTrialTierId) {
 		practiceMistakes = mistakes;
+		practiceTrial = trialTier !== undefined;
+		practiceMode = 'glyph';
+		if (trialTier) practiceTrialTier = trialTier;
+		practiceKey++;
+		view = 'practice';
+	}
+	function showWords() {
+		practiceMistakes = false;
+		practiceTrial = false;
+		practiceMode = 'word';
 		practiceKey++;
 		view = 'practice';
 	}
@@ -83,7 +98,12 @@
 			<p class="eyebrow">{t.practicePage.eyebrow}</p>
 			<h1>{t.practicePage.title}</h1>
 			<p class="lede">{t.practicePage.lede}</p>
-			{#key `${practiceKey}-${$locale}`}<Practice startWithMistakes={practiceMistakes} />{/key}
+			{#key `${practiceKey}-${$locale}`}<Practice
+					startWithMistakes={practiceMistakes}
+					startWithTrial={practiceTrial}
+					startWithTrialTier={practiceTrialTier}
+					startWithMode={practiceMode}
+				/>{/key}
 		</section>
 	{:else if view === 'learn'}<section>
 			<p class="eyebrow">{t.alphabetPage.eyebrow}</p>
@@ -100,6 +120,7 @@
 </main>
 <footer>{t.footer}</footer>
 <PwaStatus />
+<TrialUnlockToast onOpenTrial={(tier) => showPractice(false, tier)} onOpenWords={showWords} />
 
 <style>
 	:global(*) {
