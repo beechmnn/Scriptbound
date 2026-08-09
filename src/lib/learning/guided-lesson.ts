@@ -17,6 +17,7 @@ export type GuidedLessonHistory = {
 export type GuidedLessonPlan = {
 	steps: GuidedLessonStep[];
 	wordTargets: string[];
+	newGlyphLimit: number;
 };
 
 export const EMPTY_GUIDED_LESSON_HISTORY: GuidedLessonHistory = {
@@ -42,7 +43,11 @@ export function createGuidedLesson(
 ): GuidedLessonPlan {
 	const attempts = Object.values(progress).reduce((total, item) => total + item.attempts, 0);
 	if (attempts === 0) {
-		return { steps: [{ mode: 'glyph', questions: 6 }], wordTargets: [] };
+		return {
+			steps: [{ mode: 'glyph', questions: 6 }],
+			wordTargets: [],
+			newGlyphLimit: 3,
+		};
 	}
 
 	const introduced = new Set(curriculum.filter((letter) => progress[letter]?.introduced));
@@ -56,13 +61,31 @@ export function createGuidedLesson(
 			? selectLessonWords(availableWords, history.recentWords, 2)
 			: [];
 	const contextualSteps: GuidedLessonStep[] = [];
-	if (wordTargets.length >= 2)
+	if (wordTargets.length >= 2) {
 		contextualSteps.push({ mode: 'word', questions: wordTargets.length });
-	if (introduced.size >= 2) contextualSteps.push({ mode: 'encode', questions: 2 });
+		contextualSteps.push({ mode: 'encode', questions: 2 });
+	}
 	if (history.completedLessons % 2 === 1) contextualSteps.reverse();
 	steps.push(...contextualSteps);
 
-	return { steps, wordTargets };
+	return {
+		steps,
+		wordTargets,
+		newGlyphLimit: contextualSteps.length === 0 ? Math.ceil(steps[0].questions / 2) : 1,
+	};
+}
+
+export function nextGuidedLessonGlyph(
+	curriculum: string[],
+	introduced: Set<string>,
+	introducedAtStart: Set<string>,
+	newGlyphLimit: number,
+) {
+	const introducedDuringLesson = [...introduced].filter(
+		(letter) => !introducedAtStart.has(letter),
+	).length;
+	if (introducedDuringLesson >= newGlyphLimit) return undefined;
+	return curriculum.find((letter) => !introduced.has(letter));
 }
 
 export function lessonQuestionTotal(steps: GuidedLessonStep[]) {

@@ -34,6 +34,7 @@
 		createGuidedLesson,
 		EMPTY_GUIDED_LESSON_HISTORY,
 		lessonQuestionTotal,
+		nextGuidedLessonGlyph,
 		type GuidedLessonHistory,
 		type GuidedLessonStep,
 	} from '$lib/learning/guided-lesson';
@@ -57,6 +58,14 @@
 	import type { Locale, PracticeMode, PracticeSet } from '$lib/types';
 	import { currentCourse } from '$lib/app';
 	const GUIDED_LESSON_SEEN_KEY = `scriptbound:guided-lesson-seen:${currentCourse.id}:v1`;
+	function readLessonStarted() {
+		if (typeof localStorage === 'undefined') return false;
+		try {
+			return localStorage.getItem(GUIDED_LESSON_SEEN_KEY) !== null;
+		} catch {
+			return false;
+		}
+	}
 	let {
 		startWithMistakes = false,
 		startWithTrial = false,
@@ -114,12 +123,14 @@
 		letterChoices = $state(createLetterChoices(curricula[$locale][0], alphabet)),
 		encodingKeys = $state(createEncodingKeys(curricula[$locale][0], alphabet));
 	let lessonStatus = $state<'inactive' | 'active' | 'transition' | 'complete'>('inactive'),
+		lessonHasStarted = $state(readLessonStarted()),
 		lessonPlan = $state<GuidedLessonStep[]>([]),
 		lessonStepIndex = $state(0),
 		lessonStepCompleted = $state(0),
 		lessonCompletedQuestions = $state(0),
 		lessonCorrectAtStart = $state(0),
 		lessonIntroducedAtStart = $state<string[]>([]),
+		lessonNewGlyphLimit = $state(1),
 		lessonWordTargets = $state<string[]>([]),
 		lessonWordsSeen = $state<string[]>([]),
 		lessonHistory = $state<GuidedLessonHistory>(EMPTY_GUIDED_LESSON_HISTORY),
@@ -152,6 +163,7 @@
 		handwritingAssessment = $state<'correct' | 'almost' | 'incorrect' | null>(null),
 		overlayOpacity = $state(0.45);
 	let answerInput = $state<HTMLInputElement>();
+	let activeContentElement = $state<HTMLElement>();
 	let nextCountdown = $state(0),
 		nextDelay = $state(2),
 		nextPaused = $state(false),
@@ -160,6 +172,7 @@
 		trialTimer: ReturnType<typeof setInterval> | undefined,
 		trialCountdownTimer: ReturnType<typeof setInterval> | undefined,
 		trialComboEffectTimer: ReturnType<typeof setTimeout> | undefined,
+		contentCenterFrame: number | undefined,
 		attentionFallbackTimer: ReturnType<typeof setTimeout> | undefined;
 	let options = $derived<{ value: PracticeMode; label: string }[]>([
 			{ value: 'glyph', label: t.modes.glyph },
@@ -213,7 +226,8 @@
 		const lessonNewGlyphs = introduced.filter(
 			(letter) => !lessonIntroducedAtStart.includes(letter),
 		).length;
-		const lessonAllowsIntroduction = lessonStatus !== 'active' || lessonNewGlyphs < 1;
+		const lessonAllowsIntroduction =
+			lessonStatus !== 'active' || lessonNewGlyphs < lessonNewGlyphLimit;
 		const mayIntroduce =
 			lessonAllowsIntroduction && (introduced.length < 4 || (acquiring < 4 && due <= 6));
 		const nextNew = mayIntroduce
@@ -361,6 +375,15 @@
 		return weighted.at(-1)?.letter ?? curriculum[0];
 	}
 	function chooseTarget(previous?: string) {
+		if (mode === 'glyph' && lessonStatus === 'active') {
+			const nextNew = nextGuidedLessonGlyph(
+				curriculum,
+				introducedLetters(),
+				new Set(lessonIntroducedAtStart),
+				lessonNewGlyphLimit,
+			);
+			if (nextNew) return nextNew;
+		}
 		const values = pool();
 		if (mode === 'word') {
 			noAdaptiveWord =
@@ -415,6 +438,18 @@
 			if (answerInput) restoreAnswerInputFocus(answerInput, mode === 'word' ? 'word' : 'glyph');
 		}
 	}
+	async function centerActiveContent() {
+		await tick();
+		if (contentCenterFrame) cancelAnimationFrame(contentCenterFrame);
+		contentCenterFrame = requestAnimationFrame(() => {
+			contentCenterFrame = undefined;
+			activeContentElement?.scrollIntoView({
+				behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+				block: 'center',
+				inline: 'nearest',
+			});
+		});
+	}
 	function clearNextTimer() {
 		if (nextTimer) clearInterval(nextTimer);
 		nextTimer = undefined;
@@ -440,10 +475,12 @@
 		clearNextTimer();
 		trialVisible = true;
 		if (trialState !== 'idle') exitTrial();
+		void centerActiveContent();
 	}
 	function returnToPractice() {
 		exitTrial();
 		trialVisible = false;
+		void centerActiveContent();
 	}
 	function lessonStepLabel(step: GuidedLessonStep) {
 		return t.lesson.steps[step.mode](step.questions);
@@ -492,23 +529,23 @@
 		encodingKeys = createEncodingKeys(target, alphabet);
 		focusAnswer();
 	}
-	function shouldStartFirstLesson() {
-		if (Object.values($progress).some((item) => item.attempts > 0)) return false;
+	function markLessonStarted() {
+		lessonHasStarted = true;
 		try {
-			if (localStorage.getItem(GUIDED_LESSON_SEEN_KEY)) return false;
 			localStorage.setItem(GUIDED_LESSON_SEEN_KEY, '1');
 		} catch {
 			// The lesson can still start when browser storage is unavailable.
 		}
-		return true;
 	}
 	function startLesson() {
 		clearNextTimer();
+		markLessonStarted();
 		lessonLocale = $locale;
 		lessonHistory = loadLessonHistory(lessonLocale);
 		const nextLesson = createGuidedLesson(curriculum, $progress, content.words, lessonHistory);
 		lessonPlan = nextLesson.steps;
 		lessonWordTargets = nextLesson.wordTargets;
+		lessonNewGlyphLimit = nextLesson.newGlyphLimit;
 		lessonStepIndex = 0;
 		lessonStepCompleted = 0;
 		lessonCompletedQuestions = 0;
@@ -519,6 +556,7 @@
 		practiceSet = 'adaptive';
 		reset(lessonPlan[0]?.mode ?? 'glyph');
 		prepareLessonIntroduction();
+		void centerActiveContent();
 	}
 	function continueLesson() {
 		const nextStep = lessonPlan[lessonStepIndex + 1];
@@ -527,6 +565,7 @@
 		lessonStepCompleted = 0;
 		lessonStatus = 'active';
 		reset(nextStep.mode);
+		void centerActiveContent();
 	}
 	function leaveLesson() {
 		if (lessonStatus === 'inactive') return;
@@ -541,10 +580,12 @@
 	function chooseFreeMode(nextMode: PracticeMode) {
 		leaveLesson();
 		reset(nextMode);
+		void centerActiveContent();
 	}
 	function returnToFreePractice() {
 		leaveLesson();
 		reset(mode);
+		void centerActiveContent();
 	}
 	function completeLessonQuestion() {
 		if (lessonStatus !== 'active' || !currentLessonStep) return false;
@@ -557,6 +598,7 @@
 			lessonStatus = 'complete';
 			saveLessonHistory(true);
 		}
+		void centerActiveContent();
 		return true;
 	}
 	function trialTierUnlocked(tierId: GlyphTrialTierId) {
@@ -591,6 +633,7 @@
 		clearTrialTimer();
 		trialPenaltyVisible = false;
 		trialState = 'ready';
+		void centerActiveContent();
 	}
 	function beginTrialCountdown() {
 		if (!trialTierUnlocked(selectedTrialTier)) return;
@@ -844,9 +887,7 @@
 	onMount(() => {
 		if (window.matchMedia('(max-width: 620px)').matches) glyphAnswerMethod = 'buttons';
 		window.addEventListener('keydown', handleTrialKeydown);
-		if (!initialMistakes && !initialTrial && initialMode === 'glyph' && shouldStartFirstLesson()) {
-			startLesson();
-		} else if (initialMode !== 'glyph' && !initialTrial) reset(initialMode);
+		if (initialMode !== 'glyph' && !initialTrial) reset(initialMode);
 		else {
 			prepareTargetIntroduction();
 			focusAnswer();
@@ -856,6 +897,7 @@
 		clearNextTimer();
 		clearTrialTimer();
 		if (typeof window !== 'undefined') window.removeEventListener('keydown', handleTrialKeydown);
+		if (contentCenterFrame) cancelAnimationFrame(contentCenterFrame);
 		if (attentionFallbackTimer) clearTimeout(attentionFallbackTimer);
 	});
 </script>
@@ -864,7 +906,9 @@
 	<section class="lesson-launcher" aria-labelledby="guided-lesson-title">
 		<div>
 			<p class="eyebrow">{t.lesson.eyebrow}</p>
-			<h2 id="guided-lesson-title">{t.lesson.title}</h2>
+			<h2 id="guided-lesson-title">
+				{lessonHasStarted ? t.lesson.title : t.lesson.startTitle}
+			</h2>
 			<p>{t.lesson.body}</p>
 		</div>
 		<button type="button" onclick={startLesson}>{t.lesson.start}</button>
@@ -913,7 +957,11 @@
 	</div>
 {/if}
 {#if trialVisible && trialState === 'idle'}
-	<section class="trial-launcher" aria-labelledby="glyph-trial-title">
+	<section
+		bind:this={activeContentElement}
+		class="trial-launcher"
+		aria-labelledby="glyph-trial-title"
+	>
 		<div>
 			<p class="eyebrow">{t.trial.eyebrow}</p>
 			<h2 id="glyph-trial-title">{t.trial.title}</h2>
@@ -944,6 +992,7 @@
 {#if trialVisible}
 	{#if trialState !== 'idle'}
 		<section
+			bind:this={activeContentElement}
 			class="practice-card trial-card"
 			class:combo-building={trialState === 'running' && trialCombo >= 3}
 			class:combo-strong={trialState === 'running' && trialCombo >= 7}
@@ -1078,7 +1127,11 @@
 		</section>
 	{/if}
 {:else if lessonStatus === 'transition' && currentLessonStep}
-	<section class="lesson-boundary practice-card" aria-live="polite">
+	<section
+		bind:this={activeContentElement}
+		class="lesson-boundary practice-card"
+		aria-live="polite"
+	>
 		<p class="eyebrow">{t.lesson.stepComplete}</p>
 		<h2>{t.lesson.completedStep(t.modes[currentLessonStep.mode])}</h2>
 		{#if lessonPlan[lessonStepIndex + 1]}
@@ -1093,7 +1146,11 @@
 	</section>
 {:else if lessonStatus === 'complete'}
 	{@const offeredTrialTier = lessonTrialOffer()}
-	<section class="lesson-boundary lesson-complete practice-card" aria-live="polite">
+	<section
+		bind:this={activeContentElement}
+		class="lesson-boundary lesson-complete practice-card"
+		aria-live="polite"
+	>
 		<p class="eyebrow">{t.lesson.completeEyebrow}</p>
 		<h2>{t.lesson.completeTitle}</h2>
 		<p>{t.lesson.completeBody(score - lessonCorrectAtStart, lessonCompletedQuestions)}</p>
@@ -1118,6 +1175,7 @@
 	</section>
 {:else}
 	<div
+		bind:this={activeContentElement}
 		class="practice-card"
 		class:word-mode={mode === 'word'}
 		class:simplified-result={simplifiedResult && submitted}

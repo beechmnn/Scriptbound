@@ -27,6 +27,10 @@ if (browser) {
 	glyphTrialRecords.subscribe((records) => localStorage.setItem(KEY, JSON.stringify(records)));
 }
 
+export function resetGlyphTrialRecords() {
+	glyphTrialRecords.set({});
+}
+
 export function glyphTrialRecordKey(locale: Locale, tierId: GlyphTrialTierId) {
 	return `${locale}:${tierId}` as const;
 }

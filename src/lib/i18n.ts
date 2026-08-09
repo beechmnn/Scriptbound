@@ -52,6 +52,7 @@ export const copy = {
 			modeLabel: 'Practice mode',
 			lesson: {
 				eyebrow: 'GUIDED LESSON',
+				startTitle: 'Start learning',
 				title: 'Continue learning',
 				body: 'Follow an adaptive lesson, or choose a practice mode below.',
 				start: 'Start lesson',
@@ -215,7 +216,8 @@ export const copy = {
 			practiceMistakes: 'Practise mistakes',
 			introduceAll: 'Introduce all glyphs',
 			reset: 'Reset progress',
-			confirmReset: 'Reset all practice progress? This cannot be undone.',
+			confirmReset:
+				'Reset all learning progress, lesson history, and trial records? This cannot be undone.',
 			notScheduled: 'Not scheduled',
 			dueNow: 'Due now',
 			inDays: (days: number) => `In ${days} day${days === 1 ? '' : 's'}`,
@@ -299,6 +301,7 @@ export const copy = {
 			modeLabel: 'Übungsmodus',
 			lesson: {
 				eyebrow: 'GEFÜHRTE LEKTION',
+				startTitle: 'Lernen beginnen',
 				title: 'Weiterlernen',
 				body: 'Folge einer adaptiven Lektion oder wähle unten einen Übungsmodus.',
 				start: 'Lektion beginnen',
@@ -464,7 +467,7 @@ export const copy = {
 			introduceAll: 'Alle Glyphen einführen',
 			reset: 'Fortschritt zurücksetzen',
 			confirmReset:
-				'Den gesamten Übungsfortschritt zurücksetzen? Dies kann nicht rückgängig gemacht werden.',
+				'Gesamten Lernfortschritt, Lektionsverlauf und Prüfungsrekorde zurücksetzen? Dies kann nicht rückgängig gemacht werden.',
 			notScheduled: 'Nicht geplant',
 			dueNow: 'Jetzt fällig',
 			inDays: (days: number) => `In ${days} Tag${days === 1 ? '' : 'en'}`,

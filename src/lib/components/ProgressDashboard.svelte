@@ -4,11 +4,8 @@
 	import { alphabet } from '$lib/content';
 	import { copy } from '$lib/i18n';
 	import { locale } from '$lib/stores/locale';
-	import {
-		introduceAllGlyphs,
-		progress as progressStore,
-		resetProgress,
-	} from '$lib/stores/progress';
+	import { introduceAllGlyphs, progress as progressStore } from '$lib/stores/progress';
+	import { resetLearningData } from '$lib/stores/learning-data';
 	import { needsAttention, newGlyphProgress } from '$lib/learning/scheduler';
 	import type { GlyphProgress } from '$lib/types';
 	let { onPracticeMistakes }: { onPracticeMistakes: () => void } = $props();
@@ -31,7 +28,7 @@
 	let hasProgress = $derived(Object.keys($progressStore).length > 0);
 	let allIntroduced = $derived(alphabet.every((letter) => $progressStore[letter]?.introduced));
 	function confirmReset() {
-		if (window.confirm(t.confirmReset)) resetProgress();
+		if (window.confirm(t.confirmReset)) resetLearningData();
 	}
 	function reviewText(timestamp: number) {
 		if (!timestamp) return t.notScheduled;

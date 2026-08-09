@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGlyphProgress } from './scheduler';
-import { createGuidedLesson, lessonQuestionTotal } from './guided-lesson';
+import { createGuidedLesson, lessonQuestionTotal, nextGuidedLessonGlyph } from './guided-lesson';
 
 const curriculum = ['e', 't', 'a', 'o'];
 
@@ -10,7 +10,18 @@ describe('guided lessons', () => {
 		expect(lesson).toEqual({
 			steps: [{ mode: 'glyph', questions: 6 }],
 			wordTargets: [],
+			newGlyphLimit: 3,
 		});
+	});
+
+	it('introduces several glyphs before using the rest of an early lesson for recall', () => {
+		const introducedAtStart = new Set<string>();
+		expect(nextGuidedLessonGlyph(curriculum, new Set(), introducedAtStart, 3)).toBe('e');
+		expect(nextGuidedLessonGlyph(curriculum, new Set(['e']), introducedAtStart, 3)).toBe('t');
+		expect(nextGuidedLessonGlyph(curriculum, new Set(['e', 't']), introducedAtStart, 3)).toBe('a');
+		expect(
+			nextGuidedLessonGlyph(curriculum, new Set(['e', 't', 'a']), introducedAtStart, 3),
+		).toBeUndefined();
 	});
 
 	it('adds contextual activities when the learner has enough glyphs', () => {
@@ -25,6 +36,7 @@ describe('guided lessons', () => {
 			{ mode: 'encode', questions: 2 },
 		]);
 		expect(lesson.wordTargets).toEqual(['tea', 'tee']);
+		expect(lesson.newGlyphLimit).toBe(1);
 		expect(lessonQuestionTotal(lesson.steps)).toBe(8);
 	});
 
@@ -38,6 +50,7 @@ describe('guided lessons', () => {
 		};
 		const lesson = createGuidedLesson(curriculum, { e }, ['tea']);
 		expect(lesson.steps).toEqual([{ mode: 'glyph', questions: 5 }]);
+		expect(lesson.newGlyphLimit).toBe(3);
 	});
 
 	it('holds back Words until at least two distinct targets are available', () => {
@@ -46,7 +59,9 @@ describe('guided lessons', () => {
 		const lesson = createGuidedLesson(curriculum, { e, t }, ['tea']);
 
 		expect(lesson.steps).not.toContainEqual(expect.objectContaining({ mode: 'word' }));
+		expect(lesson.steps).not.toContainEqual(expect.objectContaining({ mode: 'encode' }));
 		expect(lesson.wordTargets).toEqual([]);
+		expect(lesson.newGlyphLimit).toBe(2);
 	});
 
 	it('prefers words that were not used in recent lessons', () => {
