@@ -127,6 +127,13 @@
 	<span>{t.footer}</span>
 	<span aria-hidden="true">·</span>
 	<a href={currentCourse.sourceUrl} target="_blank" rel="noreferrer">{t.fontSource}</a>
+	<span aria-hidden="true">·</span>
+	<a
+		href="https://www.instagram.com/beechmnn/"
+		target="_blank"
+		rel="noreferrer"
+		aria-label={t.feedbackLabel}>{t.feedback}</a
+	>
 </footer>
 <TrialUnlockToast onOpenTrial={(tier) => showPractice(false, tier)} onOpenWords={showWords} />
 

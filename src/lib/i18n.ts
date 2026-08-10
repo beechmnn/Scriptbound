@@ -39,6 +39,8 @@ export const copy = {
 		},
 		footer: 'Client-side · private by default · no account required',
 		fontSource: `${currentCourse.name} source`,
+		feedback: 'Feedback',
+		feedbackLabel: 'Send feedback or suggestions on Instagram',
 		alphabetChart: {
 			hide: 'Hide Latin letters',
 			reveal: 'Reveal Latin letters',
@@ -332,6 +334,8 @@ export const copy = {
 		},
 		footer: 'Lokal im Browser · standardmäßig privat · kein Konto nötig',
 		fontSource: `${currentCourse.name}-Quelle`,
+		feedback: 'Feedback',
+		feedbackLabel: 'Feedback oder Vorschläge auf Instagram senden',
 		alphabetChart: {
 			hide: 'Lateinische Buchstaben ausblenden',
 			reveal: 'Lateinische Buchstaben einblenden',
