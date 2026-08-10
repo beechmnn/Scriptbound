@@ -7,11 +7,9 @@
 	import { onMount } from 'svelte';
 	import { copy, localeNames } from '$lib/i18n';
 	import { locale, setLocale } from '$lib/stores/locale';
-	import { palette, setPalette } from '$lib/stores/palette';
-	import type { Locale, Palette, PracticeMode } from '$lib/types';
+	import type { Locale, PracticeMode } from '$lib/types';
 	import { currentCourse } from '$lib/app';
 	import type { GlyphTrialTierId } from '$lib/learning/glyph-trial';
-	const paletteNames: Record<Palette, string> = { gold: 'Gold', petrol: 'Petrol' };
 	let view = $state<'practice' | 'learn' | 'progress'>('practice'),
 		fontReady = $state(false),
 		practiceMistakes = $state(false),
@@ -61,7 +59,18 @@
 				showPractice();
 			}}>SCRIPT<span>BOUND</span></a
 		>
-		<span class="course-name">{currentCourse.name}</span>
+		<a
+			class="course-name"
+			href={currentCourse.sourceUrl}
+			target="_blank"
+			rel="noreferrer"
+			aria-label={t.courseSource(currentCourse.name)}
+		>
+			<span>{currentCourse.name}</span>
+			<svg viewBox="0 0 16 16" aria-hidden="true">
+				<path d="M6 3h7v7M13 3 5.5 10.5M11 9v4H3V5h4" />
+			</svg>
+		</a>
 	</div>
 	<div class="header-actions">
 		<nav aria-label={t.nav.label}>
@@ -73,24 +82,14 @@
 				>{t.nav.progress}</button
 			>
 		</nav>
-		<div class="desktop-preferences">
-			<label class="preference"
-				><span>{t.language}</span><select
-					value={$locale}
-					onchange={(event) => setLocale(event.currentTarget.value as Locale)}
-					>{#each Object.entries(localeNames) as [value, name]}<option {value}>{name}</option
-						>{/each}</select
-				></label
-			>
-			<label class="preference"
-				><span>{t.palette}</span><select
-					value={$palette}
-					onchange={(event) => setPalette(event.currentTarget.value as Palette)}
-					>{#each Object.entries(paletteNames) as [value, name]}<option {value}>{name}</option
-						>{/each}</select
-				></label
-			>
-		</div>
+		<label class="desktop-preferences preference"
+			><span>{t.language}</span><select
+				value={$locale}
+				onchange={(event) => setLocale(event.currentTarget.value as Locale)}
+				>{#each Object.entries(localeNames) as [value, name]}<option {value}>{name}</option
+					>{/each}</select
+			></label
+		>
 		<details class="mobile-settings">
 			<summary>{t.settings}</summary>
 			<div class="mobile-settings-panel">
@@ -99,14 +98,6 @@
 						value={$locale}
 						onchange={(event) => setLocale(event.currentTarget.value as Locale)}
 						>{#each Object.entries(localeNames) as [value, name]}<option {value}>{name}</option
-							>{/each}</select
-					></label
-				>
-				<label class="preference"
-					><span>{t.palette}</span><select
-						value={$palette}
-						onchange={(event) => setPalette(event.currentTarget.value as Palette)}
-						>{#each Object.entries(paletteNames) as [value, name]}<option {value}>{name}</option
 							>{/each}</select
 					></label
 				>
@@ -145,7 +136,11 @@
 			<ProgressDashboard onPracticeMistakes={() => showPractice(true)} />
 		</section>{/if}
 </main>
-<footer>{t.footer}</footer>
+<footer>
+	<span>{t.footer}</span>
+	<span aria-hidden="true">·</span>
+	<a href={currentCourse.sourceUrl} target="_blank" rel="noreferrer">{t.fontSource}</a>
+</footer>
 <TrialUnlockToast onOpenTrial={(tier) => showPractice(false, tier)} onOpenWords={showWords} />
 
 <style>
@@ -169,21 +164,6 @@
 		font-family: Inter, ui-sans-serif, system-ui, sans-serif;
 		color: var(--ink);
 		background: var(--bg);
-	}
-	:global(:root[data-palette='gold']) {
-		--ink: #ece7da;
-		--muted: #999184;
-		--bg: #11100f;
-		--panel: #1b1916;
-		--line: #39342c;
-		--accent: #c9a766;
-		--active-ink: #18140e;
-		--button: #25211c;
-		--field: #0d0c0b;
-		--page-glow: #32291c;
-		--card-start: #201d19;
-		--card-end: #171513;
-		--feedback: #151311;
 	}
 	:global(body) {
 		margin: 0;
@@ -350,11 +330,28 @@
 		color: var(--accent);
 	}
 	.course-name {
+		display: inline-flex;
+		width: fit-content;
+		align-items: center;
+		gap: 0.35rem;
 		color: var(--muted);
 		font-size: 0.66rem;
 		font-weight: 650;
 		letter-spacing: 0.16em;
+		text-decoration: none;
 		text-transform: uppercase;
+	}
+	.course-name svg {
+		width: 0.8rem;
+		height: 0.8rem;
+		fill: none;
+		stroke: currentcolor;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		stroke-width: 1.5;
+	}
+	.course-name:hover {
+		color: var(--ink);
 	}
 	.header-actions {
 		display: flex;
@@ -363,8 +360,6 @@
 	}
 	.desktop-preferences {
 		display: flex;
-		align-items: center;
-		gap: 0.7rem;
 	}
 	.mobile-settings {
 		display: none;
@@ -440,9 +435,19 @@
 		max-width: 1100px;
 		margin: auto;
 		padding: 1.25rem;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.35rem;
 		color: var(--muted);
 		border-top: 1px solid var(--line);
 		font-size: 0.75rem;
+	}
+	footer a {
+		color: inherit;
+		text-underline-offset: 0.2em;
+	}
+	footer a:hover {
+		color: var(--ink);
 	}
 	@media (max-width: 720px) {
 		header {

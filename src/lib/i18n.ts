@@ -10,8 +10,8 @@ export const copy = {
 			description: `Learn to read the ${currentCourse.name} script with ${APP_NAME}.`,
 		},
 		language: 'Language',
-		palette: 'Palette',
 		settings: 'Settings',
+		courseSource: (courseName: string) => `Open the ${courseName} source`,
 		nav: {
 			label: 'Main navigation',
 			practice: 'Practice',
@@ -39,6 +39,7 @@ export const copy = {
 			lede: 'Three recalls establish a glyph; successful reviews across 1, 3, and 7 days mark it learned. Context practice is tracked separately.',
 		},
 		footer: 'Client-side · private by default · no account required',
+		fontSource: `${currentCourse.name} source`,
 		alphabetChart: {
 			hide: 'Hide Latin letters',
 			reveal: 'Reveal Latin letters',
@@ -303,8 +304,8 @@ export const copy = {
 			description: `Lerne mit ${APP_NAME}, die ${currentCourse.name}-Schrift zu lesen.`,
 		},
 		language: 'Sprache',
-		palette: 'Farbpalette',
 		settings: 'Einstellungen',
+		courseSource: (courseName: string) => `Quelle von ${courseName} öffnen`,
 		nav: {
 			label: 'Hauptnavigation',
 			practice: 'Üben',
@@ -332,6 +333,7 @@ export const copy = {
 			lede: 'Drei Abrufe festigen eine Glyphe; erfolgreiche Wiederholungen nach 1, 3 und 7 Tagen markieren sie als gelernt. Kontextübungen werden separat erfasst.',
 		},
 		footer: 'Lokal im Browser · standardmäßig privat · kein Konto nötig',
+		fontSource: `${currentCourse.name}-Quelle`,
 		alphabetChart: {
 			hide: 'Lateinische Buchstaben ausblenden',
 			reveal: 'Lateinische Buchstaben einblenden',

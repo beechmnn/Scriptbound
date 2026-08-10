@@ -574,6 +574,7 @@ export const necrofonticonCourse = {
 	fontFileName: 'necrofonticon.woff2',
 	fontUrl: '/fonts/necrofonticon.woff2',
 	pdfFontUrl: '/fonts/necrofonticon.ttf',
+	sourceUrl: 'https://elderprops.com/download/necrofonticon/',
 	glyphs,
 	content: {
 		en: { curriculum: curricula.en, ...practiceContent.en },

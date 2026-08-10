@@ -1,5 +1,4 @@
 export type Locale = 'en' | 'de';
-export type Palette = 'gold' | 'petrol';
 export type PracticeMode = 'glyph' | 'word' | 'encode' | 'handwriting';
 export type PracticeSet = 'adaptive' | 'mistakes' | 'all';
 export type LearningStage = 'unseen' | 'acquiring' | 'reviewing' | 'learned' | 'durable';
@@ -21,6 +20,7 @@ export type ScriptCourse = {
 	fontFileName: string;
 	fontUrl: string;
 	pdfFontUrl: string;
+	sourceUrl: string;
 	glyphs: readonly CourseGlyph[];
 	content: Record<Locale, CourseContent>;
 	legacyStorageKeys: {
