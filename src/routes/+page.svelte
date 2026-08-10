@@ -82,7 +82,7 @@
 				>{t.nav.progress}</button
 			>
 		</nav>
-		<label class="desktop-preferences preference"
+		<label class="language-preference preference"
 			><span>{t.language}</span><select
 				value={$locale}
 				onchange={(event) => setLocale(event.currentTarget.value as Locale)}
@@ -90,19 +90,6 @@
 					>{/each}</select
 			></label
 		>
-		<details class="mobile-settings">
-			<summary>{t.settings}</summary>
-			<div class="mobile-settings-panel">
-				<label class="preference"
-					><span>{t.language}</span><select
-						value={$locale}
-						onchange={(event) => setLocale(event.currentTarget.value as Locale)}
-						>{#each Object.entries(localeNames) as [value, name]}<option {value}>{name}</option
-							>{/each}</select
-					></label
-				>
-			</div>
-		</details>
 	</div>
 </header>
 <main>
@@ -358,11 +345,8 @@
 		align-items: center;
 		gap: 0.7rem;
 	}
-	.desktop-preferences {
+	.language-preference {
 		display: flex;
-	}
-	.mobile-settings {
-		display: none;
 	}
 	nav {
 		display: flex;
@@ -451,20 +435,18 @@
 	}
 	@media (max-width: 720px) {
 		header {
-			align-items: flex-start;
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) auto;
+			align-items: center;
 			gap: 0.8rem;
 			padding-top: 1rem;
 			padding-bottom: 0.75rem;
-			flex-direction: column;
 		}
 		.header-actions {
-			display: grid;
-			grid-template-columns: minmax(0, 1fr) auto;
-			width: 100%;
-			align-items: center;
-			gap: 0.35rem;
+			display: contents;
 		}
 		nav {
+			grid-column: 1 / -1;
 			display: grid;
 			grid-template-columns: repeat(3, minmax(0, 1fr));
 			min-width: 0;
@@ -474,55 +456,26 @@
 			min-height: 44px;
 			padding: 0.6rem 0.45rem;
 		}
-		.desktop-preferences {
-			display: none;
+		.language-preference {
+			grid-column: 2;
+			grid-row: 1;
 		}
-		.mobile-settings {
-			position: relative;
-			display: block;
-		}
-		.mobile-settings summary {
-			min-height: 44px;
-			border: 1px solid var(--line);
-			border-radius: 0.4rem;
-			padding: 0.75rem;
-			color: var(--muted);
-			background: var(--button);
-			font-size: 0.8rem;
-			cursor: pointer;
-			list-style: none;
-		}
-		.mobile-settings summary::-webkit-details-marker {
-			display: none;
-		}
-		.mobile-settings-panel {
+		.language-preference span {
 			position: absolute;
-			top: calc(100% + 0.45rem);
-			right: 0;
-			z-index: 20;
-			display: grid;
-			min-width: 220px;
-			gap: 0.85rem;
-			padding: 1rem;
-			border: 1px solid var(--line);
-			border-radius: 0.55rem;
-			background: var(--panel);
-			box-shadow: 0 18px 45px #0008;
+			width: 1px;
+			height: 1px;
+			padding: 0;
+			margin: -1px;
+			overflow: hidden;
+			clip: rect(0, 0, 0, 0);
+			white-space: nowrap;
+			border: 0;
 		}
-		.mobile-settings-panel .preference {
-			justify-content: space-between;
-			margin: 0;
+		.language-preference select {
+			min-height: 44px;
 		}
 		main {
 			padding-top: 2.75rem;
-		}
-	}
-	@media (max-width: 430px) {
-		.header-actions {
-			grid-template-columns: 1fr;
-		}
-		.mobile-settings {
-			justify-self: end;
 		}
 	}
 	@media (prefers-reduced-motion: no-preference) {

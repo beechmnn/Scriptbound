@@ -10,7 +10,6 @@ export const copy = {
 			description: `Learn to read the ${currentCourse.name} script with ${APP_NAME}.`,
 		},
 		language: 'Language',
-		settings: 'Settings',
 		courseSource: (courseName: string) => `Open the ${courseName} source`,
 		nav: {
 			label: 'Main navigation',
@@ -304,7 +303,6 @@ export const copy = {
 			description: `Lerne mit ${APP_NAME}, die ${currentCourse.name}-Schrift zu lesen.`,
 		},
 		language: 'Sprache',
-		settings: 'Einstellungen',
 		courseSource: (courseName: string) => `Quelle von ${courseName} öffnen`,
 		nav: {
 			label: 'Hauptnavigation',
