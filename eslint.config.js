@@ -7,11 +7,11 @@ import globals from 'globals';
 
 export default [
 	{
-		ignores: ['.svelte-kit/**', 'build/**', 'node_modules/**'],
+		ignores: ['.svelte-kit/**', 'build/**', 'itch/dist/**', 'node_modules/**'],
 	},
 	js.configs.recommended,
 	{
-		files: ['**/*.{js,ts}'],
+		files: ['**/*.{js,mjs,cjs,ts}'],
 		languageOptions: {
 			ecmaVersion: 'latest',
 			globals: {

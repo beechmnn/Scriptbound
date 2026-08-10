@@ -52,14 +52,17 @@
 	/></svelte:head
 >
 <header>
-	<a
-		class="brand"
-		href="/"
-		onclick={(e) => {
-			e.preventDefault();
-			showPractice();
-		}}>SCRIPT<span>BOUND</span></a
-	>
+	<div class="brand-lockup">
+		<a
+			class="brand"
+			href="/"
+			onclick={(e) => {
+				e.preventDefault();
+				showPractice();
+			}}>SCRIPT<span>BOUND</span></a
+		>
+		<span class="course-name">{currentCourse.name}</span>
+	</div>
 	<div class="header-actions">
 		<nav aria-label={t.nav.label}>
 			<button class:current={view === 'practice'} onclick={() => showPractice()}
@@ -70,22 +73,45 @@
 				>{t.nav.progress}</button
 			>
 		</nav>
-		<label class="preference"
-			><span>{t.language}</span><select
-				value={$locale}
-				onchange={(event) => setLocale(event.currentTarget.value as Locale)}
-				>{#each Object.entries(localeNames) as [value, name]}<option {value}>{name}</option
-					>{/each}</select
-			></label
-		>
-		<label class="preference"
-			><span>{t.palette}</span><select
-				value={$palette}
-				onchange={(event) => setPalette(event.currentTarget.value as Palette)}
-				>{#each Object.entries(paletteNames) as [value, name]}<option {value}>{name}</option
-					>{/each}</select
-			></label
-		>
+		<div class="desktop-preferences">
+			<label class="preference"
+				><span>{t.language}</span><select
+					value={$locale}
+					onchange={(event) => setLocale(event.currentTarget.value as Locale)}
+					>{#each Object.entries(localeNames) as [value, name]}<option {value}>{name}</option
+						>{/each}</select
+				></label
+			>
+			<label class="preference"
+				><span>{t.palette}</span><select
+					value={$palette}
+					onchange={(event) => setPalette(event.currentTarget.value as Palette)}
+					>{#each Object.entries(paletteNames) as [value, name]}<option {value}>{name}</option
+						>{/each}</select
+				></label
+			>
+		</div>
+		<details class="mobile-settings">
+			<summary>{t.settings}</summary>
+			<div class="mobile-settings-panel">
+				<label class="preference"
+					><span>{t.language}</span><select
+						value={$locale}
+						onchange={(event) => setLocale(event.currentTarget.value as Locale)}
+						>{#each Object.entries(localeNames) as [value, name]}<option {value}>{name}</option
+							>{/each}</select
+					></label
+				>
+				<label class="preference"
+					><span>{t.palette}</span><select
+						value={$palette}
+						onchange={(event) => setPalette(event.currentTarget.value as Palette)}
+						>{#each Object.entries(paletteNames) as [value, name]}<option {value}>{name}</option
+							>{/each}</select
+					></label
+				>
+			</div>
+		</details>
 	</div>
 </header>
 <main>
@@ -94,6 +120,7 @@
 				>{t.font.bodyStart} <code>{currentCourse.fontFileName}</code> {t.font.bodyEnd}</span
 			>
 		</aside>{/if}
+	<PwaStatus />
 	{#if view === 'practice'}<section>
 			<p class="eyebrow">{t.practicePage.eyebrow}</p>
 			<h1>{t.practicePage.title}</h1>
@@ -119,7 +146,6 @@
 		</section>{/if}
 </main>
 <footer>{t.footer}</footer>
-<PwaStatus />
 <TrialUnlockToast onOpenTrial={(tier) => showPractice(false, tier)} onOpenWords={showWords} />
 
 <style>
@@ -316,13 +342,32 @@
 		font-weight: 800;
 		letter-spacing: 0.13em;
 	}
+	.brand-lockup {
+		display: grid;
+		gap: 0.22rem;
+	}
 	.brand span {
 		color: var(--accent);
+	}
+	.course-name {
+		color: var(--muted);
+		font-size: 0.66rem;
+		font-weight: 650;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
 	}
 	.header-actions {
 		display: flex;
 		align-items: center;
 		gap: 0.7rem;
+	}
+	.desktop-preferences {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+	}
+	.mobile-settings {
+		display: none;
 	}
 	nav {
 		display: flex;
@@ -402,20 +447,77 @@
 	@media (max-width: 720px) {
 		header {
 			align-items: flex-start;
+			gap: 0.8rem;
 			padding-top: 1rem;
+			padding-bottom: 0.75rem;
 			flex-direction: column;
 		}
 		.header-actions {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) auto;
 			width: 100%;
-			align-items: flex-start;
-			justify-content: space-between;
-			flex-wrap: wrap;
+			align-items: center;
+			gap: 0.35rem;
 		}
 		nav {
+			display: grid;
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+			min-width: 0;
 			overflow: auto;
 		}
-		.preference {
-			padding-bottom: 0.8rem;
+		nav button {
+			min-height: 44px;
+			padding: 0.6rem 0.45rem;
+		}
+		.desktop-preferences {
+			display: none;
+		}
+		.mobile-settings {
+			position: relative;
+			display: block;
+		}
+		.mobile-settings summary {
+			min-height: 44px;
+			border: 1px solid var(--line);
+			border-radius: 0.4rem;
+			padding: 0.75rem;
+			color: var(--muted);
+			background: var(--button);
+			font-size: 0.8rem;
+			cursor: pointer;
+			list-style: none;
+		}
+		.mobile-settings summary::-webkit-details-marker {
+			display: none;
+		}
+		.mobile-settings-panel {
+			position: absolute;
+			top: calc(100% + 0.45rem);
+			right: 0;
+			z-index: 20;
+			display: grid;
+			min-width: 220px;
+			gap: 0.85rem;
+			padding: 1rem;
+			border: 1px solid var(--line);
+			border-radius: 0.55rem;
+			background: var(--panel);
+			box-shadow: 0 18px 45px #0008;
+		}
+		.mobile-settings-panel .preference {
+			justify-content: space-between;
+			margin: 0;
+		}
+		main {
+			padding-top: 2.75rem;
+		}
+	}
+	@media (max-width: 430px) {
+		.header-actions {
+			grid-template-columns: 1fr;
+		}
+		.mobile-settings {
+			justify-self: end;
 		}
 	}
 	@media (prefers-reduced-motion: no-preference) {

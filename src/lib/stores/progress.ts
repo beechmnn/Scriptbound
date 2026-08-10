@@ -7,7 +7,7 @@ import { currentCourse } from '$lib/app';
 import { readMigratedValue } from './persistence';
 
 const KEY = `scriptbound:progress:${currentCourse.id}:v1`;
-const LEGACY_KEYS = ['necrofonticon-progress-v1'];
+const LEGACY_KEYS = currentCourse.legacyStorageKeys.progress;
 export type ProgressBackup = {
 	version: 2;
 	course: typeof currentCourse.id;

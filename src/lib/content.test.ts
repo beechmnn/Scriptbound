@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { get } from 'svelte/store';
-import { alphabet, curricula, practiceContent } from './content';
+import { currentCourse } from './app';
 import { locale, setLocale } from './stores/locale';
 
-describe('localized curricula and content', () => {
+const alphabet = currentCourse.glyphs.map(({ answer }) => answer);
+const curricula = {
+	en: currentCourse.content.en.curriculum,
+	de: currentCourse.content.de.curriculum,
+};
+const practiceContent = currentCourse.content;
+
+describe('Necrofonticon localized curricula and content', () => {
 	afterEach(() => setLocale('en'));
 
 	it('provides a complete frequency-prioritized alphabet for each language', () => {

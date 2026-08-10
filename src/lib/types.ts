@@ -3,6 +3,32 @@ export type Palette = 'gold' | 'petrol';
 export type PracticeMode = 'glyph' | 'word' | 'encode' | 'handwriting';
 export type PracticeSet = 'adaptive' | 'mistakes' | 'all';
 export type LearningStage = 'unseen' | 'acquiring' | 'reviewing' | 'learned' | 'durable';
+export type CourseGlyph = {
+	id: string;
+	glyph: string;
+	answer: string;
+	label: string;
+};
+export type CourseContent = {
+	curriculum: readonly string[];
+	words: readonly string[];
+	sentences: readonly string[];
+};
+export type ScriptCourse = {
+	id: string;
+	name: string;
+	fontFamily: string;
+	fontFileName: string;
+	fontUrl: string;
+	pdfFontUrl: string;
+	glyphs: readonly CourseGlyph[];
+	content: Record<Locale, CourseContent>;
+	legacyStorageKeys: {
+		progress: readonly string[];
+		reminders: readonly string[];
+		lastReminder: readonly string[];
+	};
+};
 export type GlyphProgress = {
 	letter: string;
 	introduced: boolean;

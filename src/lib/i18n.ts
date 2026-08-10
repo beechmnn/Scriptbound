@@ -11,6 +11,7 @@ export const copy = {
 		},
 		language: 'Language',
 		palette: 'Palette',
+		settings: 'Settings',
 		nav: {
 			label: 'Main navigation',
 			practice: 'Practice',
@@ -65,8 +66,6 @@ export const copy = {
 					tracingTitle: (courseName: string) => `${courseName.toUpperCase()} TRACING PRACTICE`,
 					tracingSubtitle:
 						'Trace each pale glyph, following the solid example at the start of the row.',
-					name: 'Name',
-					date: 'Date',
 					tracingFooter: 'Trace slowly first, then repeat with a confident continuous stroke.',
 				},
 			},
@@ -255,6 +254,23 @@ export const copy = {
 		},
 		phase3: {
 			install: 'Install app',
+			installEyebrow: 'KEEP LEARNING',
+			installTitle: 'Take Scriptbound with you',
+			installBody:
+				'Add Scriptbound to your home screen for quick access, offline practice, and local progress. No app store required.',
+			framedTitle: 'Open the installable app',
+			framedBody:
+				'Continue on Scriptbound’s standalone site so installation, offline practice, and progress work reliably.',
+			openInstallable: 'Open Scriptbound',
+			installIos: 'Install on iPhone or iPad',
+			notNow: 'Not now',
+			manualInstall: 'Use your browser menu and choose “Install app” or “Add to Home Screen”.',
+			iosTitle: 'Install from Safari',
+			iosSteps: [
+				'Tap the Share button in Safari.',
+				'Choose “Add to Home Screen”.',
+				'Enable “Open as Web App”, then tap “Add”.',
+			],
 			update: 'Update available',
 			offline: 'Offline',
 			readyOffline: 'Ready offline',
@@ -288,6 +304,7 @@ export const copy = {
 		},
 		language: 'Sprache',
 		palette: 'Farbpalette',
+		settings: 'Einstellungen',
 		nav: {
 			label: 'Hauptnavigation',
 			practice: 'Üben',
@@ -326,8 +343,8 @@ export const copy = {
 				chartTitle: 'Glyphenübersicht',
 				chartBody:
 					'Eine kompakte Übersicht aller Glyphen mit den zugehörigen lateinischen Buchstaben.',
-				tracingTitle: 'Nachspurübung',
-				tracingBody: 'Schreibzeilen mit dunklen Vorlagen und hellen Glyphen zum Nachspuren.',
+				tracingTitle: 'Nachzeichenübung',
+				tracingBody: 'Schreibzeilen mit dunklen Vorlagen und hellen Glyphen zum Nachzeichen.',
 				a4: 'A4-PDF öffnen',
 				letter: 'US-Letter-PDF öffnen',
 				generating: 'PDF wird vorbereitet...',
@@ -340,13 +357,11 @@ export const copy = {
 						`Alle ${count} Glyphen mit den zugehörigen lateinischen Buchstaben`,
 					chartFooter: (courseName: string) =>
 						`Die Glyphen werden in der Kursschrift ${courseName} dargestellt.`,
-					tracingTitle: (courseName: string) => `${courseName.toUpperCase()} NACHSPURÜBUNG`,
+					tracingTitle: (courseName: string) => `${courseName.toUpperCase()} NACHZEICHENÜBUNG`,
 					tracingSubtitle:
-						'Spure jede helle Glyphe nach und orientiere dich an der dunklen Vorlage.',
-					name: 'Name',
-					date: 'Datum',
+						'Zeichne jede helle Glyphe nach und orientiere dich an der dunklen Vorlage.',
 					tracingFooter:
-						'Spure zuerst langsam nach und wiederhole die Form dann in einem sicheren Zug.',
+						'Zeichne zuerst langsam nach und wiederhole die Form dann in einem sicheren Zug.',
 				},
 			},
 		},
@@ -535,6 +550,23 @@ export const copy = {
 		},
 		phase3: {
 			install: 'App installieren',
+			installEyebrow: 'WEITERLERNEN',
+			installTitle: 'Nimm Scriptbound mit',
+			installBody:
+				'Füge Scriptbound deinem Home-Bildschirm hinzu – für schnellen Zugriff, Offline-Übungen und lokalen Lernfortschritt. Kein App-Store nötig.',
+			framedTitle: 'Öffne die installierbare App',
+			framedBody:
+				'Wechsle zur eigenständigen Scriptbound-Seite, damit Installation, Offline-Übungen und Lernfortschritt zuverlässig funktionieren.',
+			openInstallable: 'Scriptbound öffnen',
+			installIos: 'Auf iPhone oder iPad installieren',
+			notNow: 'Nicht jetzt',
+			manualInstall: 'Wähle im Browsermenü „App installieren“ oder „Zum Home-Bildschirm“ aus.',
+			iosTitle: 'Aus Safari installieren',
+			iosSteps: [
+				'Tippe in Safari auf „Teilen“.',
+				'Wähle „Zum Home-Bildschirm“.',
+				'Aktiviere „Als Web-App öffnen“ und tippe auf „Hinzufügen“.',
+			],
 			update: 'Update verfügbar',
 			offline: 'Offline',
 			readyOffline: 'Offline bereit',

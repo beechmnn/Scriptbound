@@ -252,34 +252,7 @@ function drawTracingHeader(
 		color: PDF_THEME.muted,
 	});
 
-	const fieldY = titleY - 39;
-	page.drawText(copy.name.toUpperCase(), {
-		x: MARGIN_X,
-		y: fieldY,
-		font: fonts.bold,
-		size: 6.5,
-		color: PDF_THEME.muted,
-	});
-	page.drawText(copy.date.toUpperCase(), {
-		x: width * 0.59,
-		y: fieldY,
-		font: fonts.bold,
-		size: 6.5,
-		color: PDF_THEME.muted,
-	});
-	page.drawLine({
-		start: { x: MARGIN_X + 30, y: fieldY - 1 },
-		end: { x: width * 0.55, y: fieldY - 1 },
-		thickness: 0.6,
-		color: PDF_THEME.line,
-	});
-	page.drawLine({
-		start: { x: width * 0.59 + 25, y: fieldY - 1 },
-		end: { x: width - MARGIN_X, y: fieldY - 1 },
-		thickness: 0.6,
-		color: PDF_THEME.line,
-	});
-	const ruleY = fieldY - 17;
+	const ruleY = titleY - 32;
 	drawHeaderLine(page, ruleY);
 	return ruleY - 12;
 }

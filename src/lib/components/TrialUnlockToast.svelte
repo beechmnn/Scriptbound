@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { curricula, practiceContent } from '$lib/content';
+	import { currentCourse } from '$lib/app';
 	import { copy } from '$lib/i18n';
 	import { adaptiveWordCandidates } from '$lib/learning/adaptive-content';
 	import { unlockedGlyphTrialTiers, type GlyphTrialTierId } from '$lib/learning/glyph-trial';
@@ -69,17 +69,18 @@
 		let progressReady = false;
 
 		const availableWords = () => {
-			const curriculum = curricula[currentLocale];
+			const localizedContent = currentCourse.content[currentLocale];
+			const curriculum = localizedContent.curriculum;
 			const introduced = new Set(
 				curriculum.filter((letter) => currentProgress[letter]?.introduced),
 			);
 			const nextNew = curriculum.find((letter) => !introduced.has(letter));
-			return new Set(
-				adaptiveWordCandidates(practiceContent[currentLocale].words, introduced, nextNew),
-			);
+			return new Set(adaptiveWordCandidates(localizedContent.words, introduced, nextNew));
 		};
 		const syncPrevious = () => {
-			previousTiers = new Set(unlockedGlyphTrialTiers(curricula[currentLocale], currentProgress));
+			previousTiers = new Set(
+				unlockedGlyphTrialTiers(currentCourse.content[currentLocale].curriculum, currentProgress),
+			);
 			previousWords = availableWords();
 		};
 		const unsubscribeLocale = locale.subscribe((value) => {
@@ -88,7 +89,10 @@
 		});
 		const unsubscribeProgress = progress.subscribe((value) => {
 			currentProgress = value;
-			const unlocked = unlockedGlyphTrialTiers(curricula[currentLocale], value);
+			const unlocked = unlockedGlyphTrialTiers(
+				currentCourse.content[currentLocale].curriculum,
+				value,
+			);
 			const words = availableWords();
 			if (progressReady) {
 				const newTiers = unlocked.filter((tier) => !previousTiers.has(tier));

@@ -1,8 +1,12 @@
-const CACHE = 'scriptbound-v5';
+const CACHE = 'scriptbound-v6';
 const SHELL = [
 	'/',
 	'/manifest.webmanifest',
-	'/icon.svg',
+	'/favicon-32.png',
+	'/icon-192.png',
+	'/icon-512.png',
+	'/icon-maskable-512.png',
+	'/apple-touch-icon.png',
 	'/fonts.css',
 	'/fonts/necrofonticon.woff2',
 	'/fonts/necrofonticon.ttf',

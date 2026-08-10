@@ -15,8 +15,8 @@ export function learningDataKeys() {
 			(locale) => `scriptbound:guided-lesson-history:${currentCourse.id}:${locale}:v1`,
 		),
 		`scriptbound:last-reminder:${currentCourse.id}:v1`,
-		'necrofonticon-progress-v1',
-		'necrofonticon-last-reminder',
+		...currentCourse.legacyStorageKeys.progress,
+		...currentCourse.legacyStorageKeys.lastReminder,
 	];
 }
 

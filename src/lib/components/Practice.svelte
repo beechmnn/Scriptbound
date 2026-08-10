@@ -5,7 +5,6 @@
 	import AnswerComparison from './AnswerComparison.svelte';
 	import GlyphIntroduction from './GlyphIntroduction.svelte';
 	import { onDestroy, onMount, tick, untrack } from 'svelte';
-	import { alphabet, curricula, practiceContent } from '$lib/content';
 	import { copy } from '$lib/i18n';
 	import { locale } from '$lib/stores/locale';
 	import { compareAnswer, isCorrect } from '$lib/learning/answer-checker';
@@ -59,6 +58,7 @@
 	} from '$lib/stores/glyph-trials';
 	import type { Locale, PracticeMode, PracticeSet } from '$lib/types';
 	import { currentCourse } from '$lib/app';
+	const alphabet = currentCourse.glyphs.map(({ answer }) => answer);
 	type LessonStatus = 'inactive' | 'active' | 'transition' | 'complete';
 	const GUIDED_LESSON_SEEN_KEY = `scriptbound:guided-lesson-seen:${currentCourse.id}:v1`;
 	function readLessonStarted() {
@@ -103,11 +103,11 @@
 		{ x: -38, y: -73, delay: 110 },
 	] as const;
 	let t = $derived(copy[$locale].practice),
-		curriculum = $derived(curricula[$locale]),
-		content = $derived(practiceContent[$locale]);
+		content = $derived(currentCourse.content[$locale]),
+		curriculum = $derived(content.curriculum);
 	let mode = $state<PracticeMode>('glyph'),
 		practiceSet = $state<PracticeSet>(initialMistakes ? 'mistakes' : 'adaptive'),
-		target = $state(curricula[$locale][0]),
+		target = $state(currentCourse.content[$locale].curriculum[0]),
 		answer = $state(''),
 		submitted = $state(false),
 		correct = $state(false),
@@ -123,8 +123,12 @@
 		introducedGlyph = $state<string | null>(null),
 		introductionPending = $state(false),
 		glyphAnswerMethod = $state<'type' | 'buttons'>('type'),
-		letterChoices = $state(createLetterChoices(curricula[$locale][0], alphabet)),
-		encodingKeys = $state(createEncodingKeys(curricula[$locale][0], alphabet));
+		letterChoices = $state(
+			createLetterChoices(currentCourse.content[$locale].curriculum[0], alphabet),
+		),
+		encodingKeys = $state(
+			createEncodingKeys(currentCourse.content[$locale].curriculum[0], alphabet),
+		);
 	let lessonStatus = $state<LessonStatus>('inactive'),
 		lessonHasStarted = $state(readLessonStarted()),
 		lessonPlan = $state<GuidedLessonStep[]>([]),

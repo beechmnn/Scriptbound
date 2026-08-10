@@ -1,13 +1,14 @@
 <script lang="ts">
 	import GlyphText from './GlyphText.svelte';
 	import PhaseThreeControls from './PhaseThreeControls.svelte';
-	import { alphabet } from '$lib/content';
+	import { currentCourse } from '$lib/app';
 	import { copy } from '$lib/i18n';
 	import { locale } from '$lib/stores/locale';
 	import { introduceAllGlyphs, progress as progressStore } from '$lib/stores/progress';
 	import { resetLearningData } from '$lib/stores/learning-data';
 	import { needsAttention, newGlyphProgress } from '$lib/learning/scheduler';
 	import type { GlyphProgress } from '$lib/types';
+	const alphabet = currentCourse.glyphs.map(({ answer }) => answer);
 	let { onPracticeMistakes }: { onPracticeMistakes: () => void } = $props();
 	let t = $derived(copy[$locale].progress);
 	let attempts = $derived(

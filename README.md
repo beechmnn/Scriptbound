@@ -4,6 +4,14 @@ A client-only, statically deployable SvelteKit app for learning the scripts of o
 
 The interface and practice corpus are available in English and German. The selected language is stored locally, and adaptive glyph introduction follows a language-specific letter-frequency order while sharing the same glyph mastery record.
 
+## Script courses
+
+Each script is a self-contained course registered in `src/lib/app.ts`. A course owns its glyph mapping, web and PDF font metadata, legacy storage migrations, and localized teaching packs. Each teaching pack contains its own curriculum order, words, and sentences, so a script can carry a distinct theme as well as a distinct alphabet.
+
+Necrofonticon currently lives in `src/lib/courses/necrofonticon.ts`; its English and German corpora remain intentionally occult and Lovecraftian. To introduce another script, add its course module and font files, register it in `src/lib/app.ts`, declare its web font in `static/fonts.css`, and add its font assets to the service-worker shell in `static/sw.js`. Progress, trials, lesson history, reminders, backups, and generated PDF filenames are already namespaced by course ID.
+
+Until a second complete course ships, `currentCourse` resolves to the registry default and the interface displays that course as a passive identity below the Scriptbound brand. A future course picker can replace that compatibility lookup with a persisted active course selection without moving teaching content again.
+
 ## Setup
 
 ```sh

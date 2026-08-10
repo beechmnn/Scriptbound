@@ -1,7 +1,11 @@
-import type { Locale } from '$lib/types';
-import { currentCourse } from '$lib/app';
+import type { Locale, ScriptCourse } from '$lib/types';
 
-export const alphabet = currentCourse.glyphs.map(({ answer }) => answer);
+const glyphs = 'abcdefghijklmnopqrstuvwxyz'.split('').map((letter) => ({
+	id: letter,
+	glyph: letter,
+	answer: letter,
+	label: `${letter.toUpperCase()}  ${letter}`,
+}));
 
 export const curricula: Record<Locale, string[]> = {
 	en: 'etaoinshrdlucmfwygpbvqxjkz'.split(''),
@@ -562,3 +566,22 @@ export const practiceContent: Record<Locale, { words: string[]; sentences: strin
 		],
 	},
 };
+
+export const necrofonticonCourse = {
+	id: 'necrofonticon',
+	name: 'Necrofonticon',
+	fontFamily: 'Necrofonticon',
+	fontFileName: 'necrofonticon.woff2',
+	fontUrl: '/fonts/necrofonticon.woff2',
+	pdfFontUrl: '/fonts/necrofonticon.ttf',
+	glyphs,
+	content: {
+		en: { curriculum: curricula.en, ...practiceContent.en },
+		de: { curriculum: curricula.de, ...practiceContent.de },
+	},
+	legacyStorageKeys: {
+		progress: ['necrofonticon-progress-v1'],
+		reminders: ['necrofonticon-review-reminders'],
+		lastReminder: ['necrofonticon-last-reminder'],
+	},
+} as const satisfies ScriptCourse;

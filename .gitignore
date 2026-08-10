@@ -3,4 +3,5 @@ node_modules
 build
 .DS_Store
 coverage
+itch/dist
 .naming-research.md

@@ -12,8 +12,8 @@
 
 	const REMINDERS_KEY = `scriptbound:reminders:${currentCourse.id}:v1`;
 	const LAST_REMINDER_KEY = `scriptbound:last-reminder:${currentCourse.id}:v1`;
-	const LEGACY_REMINDERS_KEYS = ['necrofonticon-review-reminders'];
-	const LEGACY_LAST_REMINDER_KEYS = ['necrofonticon-last-reminder'];
+	const LEGACY_REMINDERS_KEYS = currentCourse.legacyStorageKeys.reminders;
+	const LEGACY_LAST_REMINDER_KEYS = currentCourse.legacyStorageKeys.lastReminder;
 	let t = $derived(copy[$locale].phase3);
 	let fileInput: HTMLInputElement;
 	let message = $state('');
@@ -67,7 +67,7 @@
 		const registration = await navigator.serviceWorker?.ready;
 		await registration?.showNotification(copy[$locale].document.title, {
 			body: t.reminderNotification(count),
-			icon: '/icon.svg',
+			icon: '/icon-192.png',
 			tag: 'review-reminder',
 		});
 		localStorage.setItem(LAST_REMINDER_KEY, today);

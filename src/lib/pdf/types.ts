@@ -21,8 +21,6 @@ export interface PdfDocumentCopy {
 	chartFooter: (courseName: string) => string;
 	tracingTitle: (courseName: string) => string;
 	tracingSubtitle: string;
-	name: string;
-	date: string;
 	tracingFooter: string;
 }
 

@@ -1,9 +1,10 @@
 <script lang="ts">
 	import GlyphText from './GlyphText.svelte';
 	import AlphabetDownloads from './AlphabetDownloads.svelte';
-	import { alphabet } from '$lib/content';
+	import { currentCourse } from '$lib/app';
 	import { copy } from '$lib/i18n';
 	import { locale } from '$lib/stores/locale';
+	const alphabet = currentCourse.glyphs.map(({ answer }) => answer);
 	let reveal = $state(true),
 		selected = $state<string | null>(null);
 	let t = $derived(copy[$locale].alphabetChart);
