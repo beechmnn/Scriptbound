@@ -1,10 +1,11 @@
-const CACHE = 'scriptbound-v4';
+const CACHE = 'scriptbound-v5';
 const SHELL = [
 	'/',
 	'/manifest.webmanifest',
 	'/icon.svg',
 	'/fonts.css',
 	'/fonts/necrofonticon.woff2',
+	'/fonts/necrofonticon.ttf',
 ];
 
 self.addEventListener('install', (event) => {

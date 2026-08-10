@@ -26,6 +26,7 @@
 		glyphTrialFinalTime,
 		glyphTrialPool,
 		isGlyphTrialTierUnlocked,
+		nextUnlockedGlyphTrialTier,
 		type GlyphTrialTierId,
 	} from '$lib/learning/glyph-trial';
 	import { createEncodingKeys } from '$lib/learning/encoding-keys';
@@ -44,11 +45,12 @@
 		shouldPreventSubmittedInput,
 	} from '$lib/learning/practice-input';
 	import {
+		appendRecentText,
 		adaptiveEncodingCandidates,
 		adaptiveWordCandidates,
-		adaptiveWordPoolExhausted,
 		guidedIntroductionLetter,
 		isGuidedIntroductionSuccessful,
+		variedLessonTextCandidates,
 	} from '$lib/learning/adaptive-content';
 	import {
 		glyphTrialRecordKey,
@@ -57,6 +59,7 @@
 	} from '$lib/stores/glyph-trials';
 	import type { Locale, PracticeMode, PracticeSet } from '$lib/types';
 	import { currentCourse } from '$lib/app';
+	type LessonStatus = 'inactive' | 'active' | 'transition' | 'complete';
 	const GUIDED_LESSON_SEEN_KEY = `scriptbound:guided-lesson-seen:${currentCourse.id}:v1`;
 	function readLessonStarted() {
 		if (typeof localStorage === 'undefined') return false;
@@ -113,7 +116,7 @@
 		score = $state(0),
 		startedAt = $state(Date.now()),
 		mistakeQueue = $state<string[]>([]),
-		shownWordTargets = $state<string[]>([]),
+		recentTextTargets = $state<string[]>([]),
 		currentIsRetry = $state(false),
 		wordAutoFocusEnabled = $state(false),
 		noAdaptiveWord = $state(false),
@@ -122,7 +125,7 @@
 		glyphAnswerMethod = $state<'type' | 'buttons'>('type'),
 		letterChoices = $state(createLetterChoices(curricula[$locale][0], alphabet)),
 		encodingKeys = $state(createEncodingKeys(curricula[$locale][0], alphabet));
-	let lessonStatus = $state<'inactive' | 'active' | 'transition' | 'complete'>('inactive'),
+	let lessonStatus = $state<LessonStatus>('inactive'),
 		lessonHasStarted = $state(readLessonStarted()),
 		lessonPlan = $state<GuidedLessonStep[]>([]),
 		lessonStepIndex = $state(0),
@@ -132,10 +135,12 @@
 		lessonIntroducedAtStart = $state<string[]>([]),
 		lessonNewGlyphLimit = $state(1),
 		lessonWordTargets = $state<string[]>([]),
+		lessonEncodeTargets = $state<string[]>([]),
 		lessonWordsSeen = $state<string[]>([]),
 		lessonHistory = $state<GuidedLessonHistory>(EMPTY_GUIDED_LESSON_HISTORY),
 		lessonLocale = $state<Locale>('en');
 	let trialVisible = $state(initialTrial),
+		trialReturnLessonStatus = $state<Exclude<LessonStatus, 'inactive'> | null>(null),
 		trialState = $state<'idle' | 'ready' | 'countdown' | 'running' | 'complete'>('idle'),
 		selectedTrialTier = $state<GlyphTrialTierId>(initialTrialTier),
 		trialLocale = $state<Locale>('en'),
@@ -297,6 +302,28 @@
 			)
 			.slice(0, limit);
 	}
+	function textHistoryKey(value: Locale) {
+		return `scriptbound:recent-text-targets:${currentCourse.id}:${value}:v1`;
+	}
+	function loadTextHistory(value: Locale) {
+		try {
+			const saved = JSON.parse(localStorage.getItem(textHistoryKey(value)) ?? 'null');
+			if (Array.isArray(saved) && saved.every((text: unknown) => typeof text === 'string')) {
+				return saved.slice(-500);
+			}
+		} catch {
+			// Start with an empty history when browser storage is unavailable or invalid.
+		}
+		return [];
+	}
+	function rememberTextTarget(text: string) {
+		recentTextTargets = appendRecentText(recentTextTargets, text);
+		try {
+			localStorage.setItem(textHistoryKey($locale), JSON.stringify(recentTextTargets));
+		} catch {
+			// Variety still works for the current session without persistent browser storage.
+		}
+	}
 	function pool() {
 		const weak = weakLetters();
 		if (mode === 'glyph' || mode === 'handwriting')
@@ -313,8 +340,12 @@
 				: averageMastery() < 0.55
 					? content.words
 					: [...content.words, ...content.sentences];
-		if (mode === 'word' && lessonStatus === 'active' && lessonWordTargets.length) {
-			return lessonWordTargets;
+		if (
+			(mode === 'word' || mode === 'encode') &&
+			lessonStatus === 'active' &&
+			(mode === 'word' ? lessonWordTargets.length : lessonEncodeTargets.length)
+		) {
+			return mode === 'word' ? lessonWordTargets : lessonEncodeTargets;
 		}
 		if (practiceSet === 'mistakes' && weak.length) {
 			const filtered = source.filter((text) => weak.some((letter) => text.includes(letter)));
@@ -328,10 +359,8 @@
 			}
 			if (mode === 'encode') {
 				const nextNew = nextContextGlyph(introduced);
-				return adaptiveTexts(
-					adaptiveEncodingCandidates(source, introduced, nextNew),
-					Math.max(4, Math.round(4 + averageMastery() * 12)),
-				);
+				const candidates = adaptiveEncodingCandidates(source, introduced, nextNew);
+				return adaptiveTexts(candidates, candidates.length);
 			}
 			return adaptiveTexts(source, Math.max(2, Math.round(2 + averageMastery() * 4)));
 		}
@@ -385,26 +414,25 @@
 			if (nextNew) return nextNew;
 		}
 		const values = pool();
-		if (mode === 'word') {
-			noAdaptiveWord =
-				practiceSet === 'adaptive' && adaptiveWordPoolExhausted(values, shownWordTargets);
+		if (mode === 'word' || mode === 'encode') {
+			noAdaptiveWord = mode === 'word' && practiceSet === 'adaptive' && values.length === 0;
 			if (noAdaptiveWord) return previous ?? target;
-			const fresh = values.filter((value) => !shownWordTargets.includes(value));
-			const available = fresh.length ? fresh : values;
+			const available = variedLessonTextCandidates(
+				values,
+				recentTextTargets,
+				lessonStatus === 'active' ? lessonWordsSeen : [],
+			);
 			const nextTarget =
-				practiceSet === 'adaptive'
+				practiceSet === 'adaptive' || (mode === 'encode' && practiceSet !== 'all')
 					? weightedTextPick(available, previous)
 					: pick(available, previous);
-			if (!shownWordTargets.includes(nextTarget)) {
-				shownWordTargets = [...shownWordTargets, nextTarget];
-			}
+			rememberTextTarget(nextTarget);
 			if (lessonStatus === 'active' && !lessonWordsSeen.includes(nextTarget)) {
 				lessonWordsSeen = [...lessonWordsSeen, nextTarget];
 			}
 			return nextTarget;
 		}
 		noAdaptiveWord = false;
-		if (mode === 'encode' && practiceSet !== 'all') return weightedTextPick(values, previous);
 		return (mode === 'glyph' || mode === 'handwriting') && practiceSet !== 'all'
 			? weightedGlyphPick(values, previous)
 			: pick(values, previous);
@@ -471,15 +499,34 @@
 		focusAnswer();
 	}
 	function showTrial() {
-		leaveLesson();
+		if (!trialVisible) {
+			trialReturnLessonStatus = lessonStatus === 'inactive' ? null : lessonStatus;
+			if (trialReturnLessonStatus) lessonStatus = 'inactive';
+		}
 		clearNextTimer();
 		trialVisible = true;
 		if (trialState !== 'idle') exitTrial();
 		void centerActiveContent();
 	}
 	function returnToPractice() {
-		exitTrial();
-		trialVisible = false;
+		if (trialReturnLessonStatus) {
+			const returnStatus = trialReturnLessonStatus;
+			exitTrial();
+			trialVisible = false;
+			trialReturnLessonStatus = null;
+			lessonStatus = returnStatus;
+		} else {
+			const nextTier =
+				trialState === 'complete'
+					? nextUnlockedGlyphTrialTier(curriculum, $progress, selectedTrialTier)
+					: undefined;
+			if (nextTier) {
+				exitTrial();
+				selectedTrialTier = nextTier;
+			} else {
+				reset(mode);
+			}
+		}
 		void centerActiveContent();
 	}
 	function lessonStepLabel(step: GuidedLessonStep) {
@@ -542,9 +589,13 @@
 		markLessonStarted();
 		lessonLocale = $locale;
 		lessonHistory = loadLessonHistory(lessonLocale);
-		const nextLesson = createGuidedLesson(curriculum, $progress, content.words, lessonHistory);
+		const nextLesson = createGuidedLesson(curriculum, $progress, content.words, {
+			...lessonHistory,
+			recentWords: [...lessonHistory.recentWords, ...recentTextTargets].slice(-500),
+		});
 		lessonPlan = nextLesson.steps;
 		lessonWordTargets = nextLesson.wordTargets;
+		lessonEncodeTargets = nextLesson.encodeTargets;
 		lessonNewGlyphLimit = nextLesson.newGlyphLimit;
 		lessonStepIndex = 0;
 		lessonStepCompleted = 0;
@@ -574,6 +625,7 @@
 		lessonStatus = 'inactive';
 		lessonPlan = [];
 		lessonWordTargets = [];
+		lessonEncodeTargets = [];
 		lessonStepIndex = 0;
 		lessonStepCompleted = 0;
 	}
@@ -727,7 +779,6 @@
 		clearNextTimer();
 		if (nextMode === 'word') wordAutoFocusEnabled = false;
 		if (nextMode && nextMode !== mode) {
-			if (nextMode === 'word') shownWordTargets = [];
 			mode = nextMode;
 			mistakeQueue = [];
 		}
@@ -885,6 +936,7 @@
 		encodingKeys = createEncodingKeys(initialTarget, alphabet);
 	}
 	onMount(() => {
+		recentTextTargets = loadTextHistory($locale);
 		if (window.matchMedia('(max-width: 620px)').matches) glyphAnswerMethod = 'buttons';
 		window.addEventListener('keydown', handleTrialKeydown);
 		if (initialMode !== 'glyph' && !initialTrial) reset(initialMode);

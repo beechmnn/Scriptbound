@@ -28,8 +28,30 @@ export function adaptiveWordCandidates(
 	return [...introducedOnly, ...introductions];
 }
 
-export function adaptiveWordPoolExhausted(candidates: string[], shown: string[]) {
-	return candidates.length === 0 || candidates.every((candidate) => shown.includes(candidate));
+export function variedTextCandidates(candidates: string[], recent: string[]) {
+	const distinct = [...new Set(candidates)];
+	if (distinct.length <= 1) return distinct;
+
+	const unseen = distinct.filter((candidate) => !recent.includes(candidate));
+	if (unseen.length) return unseen;
+
+	const cooldownSize = Math.min(distinct.length - 1, Math.max(1, Math.ceil(distinct.length * 0.6)));
+	const coolingDown = new Set(recent.slice(-cooldownSize));
+	const available = distinct.filter((candidate) => !coolingDown.has(candidate));
+	return available.length ? available : distinct;
+}
+
+export function variedLessonTextCandidates(
+	candidates: string[],
+	recent: string[],
+	seenThisLesson: string[],
+) {
+	const unseenThisLesson = candidates.filter((candidate) => !seenThisLesson.includes(candidate));
+	return variedTextCandidates(unseenThisLesson.length ? unseenThisLesson : candidates, recent);
+}
+
+export function appendRecentText(recent: string[], text: string, limit = 500) {
+	return [...recent, text].slice(-limit);
 }
 
 export function adaptiveEncodingCandidates(

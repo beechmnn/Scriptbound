@@ -26,3 +26,9 @@ Progress can be exported and imported from the Progress view. Review reminders a
 ## Encoding practice
 
 The Encode mode presents readable Latin text and accepts answers through a shuffled Necrofonticon soft keyboard. Each question shows the distinct letters needed for its prompt plus three distractors, rather than the full alphabet. The keyboard includes backspace and clear controls, with space added for sentence prompts. Latin labels can be revealed as a learning aid, and encoding accuracy is reported separately on the Progress view.
+
+## Printable course materials
+
+The Alphabet view generates glyph charts and tracing workbooks entirely in the browser. Shared page sizes, colors, spacing, typography, headers, footers, and layout helpers live in `src/lib/pdf/template.ts`; `src/lib/pdf/generator.ts` applies that template to course data.
+
+To keep future character sets consistent, define their ordered `glyphs` mapping and PDF-safe `pdfFontUrl` in the course metadata. The web font can remain WOFF2, while the PDF companion should be TTF or OTF with the same glyph mapping. The generator automatically paginates larger character sets and balances tracing rows without changing the visual template.

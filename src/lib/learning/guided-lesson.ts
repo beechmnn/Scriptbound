@@ -17,6 +17,7 @@ export type GuidedLessonHistory = {
 export type GuidedLessonPlan = {
 	steps: GuidedLessonStep[];
 	wordTargets: string[];
+	encodeTargets: string[];
 	newGlyphLimit: number;
 };
 
@@ -46,6 +47,7 @@ export function createGuidedLesson(
 		return {
 			steps: [{ mode: 'glyph', questions: 6 }],
 			wordTargets: [],
+			encodeTargets: [],
 			newGlyphLimit: 3,
 		};
 	}
@@ -56,14 +58,19 @@ export function createGuidedLesson(
 	const steps: GuidedLessonStep[] = [{ mode: 'glyph', questions: due ? 5 : 4 }];
 
 	const availableWords = adaptiveWordCandidates(words, introduced, nextNew);
-	const wordTargets =
+	const lessonTargets =
 		introduced.size >= 2 && availableWords.length >= 2
-			? selectLessonWords(availableWords, history.recentWords, 2)
+			? selectLessonWords(availableWords, history.recentWords, 6)
 			: [];
+	const wordTargets = lessonTargets.slice(0, 4);
+	const encodeTargets = [
+		...lessonTargets.slice(wordTargets.length, wordTargets.length + 2),
+		...wordTargets,
+	].slice(0, 2);
 	const contextualSteps: GuidedLessonStep[] = [];
 	if (wordTargets.length >= 2) {
 		contextualSteps.push({ mode: 'word', questions: wordTargets.length });
-		contextualSteps.push({ mode: 'encode', questions: 2 });
+		contextualSteps.push({ mode: 'encode', questions: encodeTargets.length });
 	}
 	if (history.completedLessons % 2 === 1) contextualSteps.reverse();
 	steps.push(...contextualSteps);
@@ -71,6 +78,7 @@ export function createGuidedLesson(
 	return {
 		steps,
 		wordTargets,
+		encodeTargets,
 		newGlyphLimit: contextualSteps.length === 0 ? Math.ceil(steps[0].questions / 2) : 1,
 	};
 }

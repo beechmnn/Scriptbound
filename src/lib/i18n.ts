@@ -42,6 +42,34 @@ export const copy = {
 			hide: 'Hide Latin letters',
 			reveal: 'Reveal Latin letters',
 			selectLetter: (letter: string) => `Select letter ${letter}`,
+			pdf: {
+				eyebrow: 'PRINTABLE STUDY SHEETS',
+				title: 'Take the script offline.',
+				body: 'PDFs open in a new tab for viewing, printing, or saving.',
+				chartTitle: 'Glyph chart',
+				chartBody: 'A compact overview of every glyph and its corresponding Latin letter.',
+				tracingTitle: 'Tracing practice',
+				tracingBody: 'School-style writing rows with solid examples and pale glyphs to trace over.',
+				a4: 'Open A4 PDF',
+				letter: 'Open US Letter PDF',
+				generating: 'Preparing PDF...',
+				failed: 'The PDF could not be created. Please try again.',
+				document: {
+					referenceEyebrow: 'SCRIPTBOUND / REFERENCE SHEET',
+					writingEyebrow: 'SCRIPTBOUND / WRITING PRACTICE',
+					chartTitle: (courseName: string) => `${courseName.toUpperCase()} GLYPH CHART`,
+					chartSubtitle: (count: number) =>
+						`All ${count} glyphs with their corresponding Latin letters`,
+					chartFooter: (courseName: string) =>
+						`Glyphs are shown using the ${courseName} course font.`,
+					tracingTitle: (courseName: string) => `${courseName.toUpperCase()} TRACING PRACTICE`,
+					tracingSubtitle:
+						'Trace each pale glyph, following the solid example at the start of the row.',
+					name: 'Name',
+					date: 'Date',
+					tracingFooter: 'Trace slowly first, then repeat with a confident continuous stroke.',
+				},
+			},
 		},
 		practice: {
 			modes: {
@@ -291,6 +319,36 @@ export const copy = {
 			hide: 'Lateinische Buchstaben ausblenden',
 			reveal: 'Lateinische Buchstaben einblenden',
 			selectLetter: (letter: string) => `Buchstaben ${letter} auswählen`,
+			pdf: {
+				eyebrow: 'ARBEITSBLÄTTER ZUM AUSDRUCKEN',
+				title: 'Nimm die Schrift mit.',
+				body: 'PDFs werden zum Ansehen, Drucken oder Sichern in einem neuen Tab geöffnet.',
+				chartTitle: 'Glyphenübersicht',
+				chartBody:
+					'Eine kompakte Übersicht aller Glyphen mit den zugehörigen lateinischen Buchstaben.',
+				tracingTitle: 'Nachspurübung',
+				tracingBody: 'Schreibzeilen mit dunklen Vorlagen und hellen Glyphen zum Nachspuren.',
+				a4: 'A4-PDF öffnen',
+				letter: 'US-Letter-PDF öffnen',
+				generating: 'PDF wird vorbereitet...',
+				failed: 'Das PDF konnte nicht erstellt werden. Bitte versuche es erneut.',
+				document: {
+					referenceEyebrow: 'SCRIPTBOUND / ÜBERSICHT',
+					writingEyebrow: 'SCRIPTBOUND / SCHREIBÜBUNG',
+					chartTitle: (courseName: string) => `${courseName.toUpperCase()} GLYPHENÜBERSICHT`,
+					chartSubtitle: (count: number) =>
+						`Alle ${count} Glyphen mit den zugehörigen lateinischen Buchstaben`,
+					chartFooter: (courseName: string) =>
+						`Die Glyphen werden in der Kursschrift ${courseName} dargestellt.`,
+					tracingTitle: (courseName: string) => `${courseName.toUpperCase()} NACHSPURÜBUNG`,
+					tracingSubtitle:
+						'Spure jede helle Glyphe nach und orientiere dich an der dunklen Vorlage.',
+					name: 'Name',
+					date: 'Datum',
+					tracingFooter:
+						'Spure zuerst langsam nach und wiederhole die Form dann in einem sicheren Zug.',
+				},
+			},
 		},
 		practice: {
 			modes: {

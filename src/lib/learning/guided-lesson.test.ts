@@ -10,6 +10,7 @@ describe('guided lessons', () => {
 		expect(lesson).toEqual({
 			steps: [{ mode: 'glyph', questions: 6 }],
 			wordTargets: [],
+			encodeTargets: [],
 			newGlyphLimit: 3,
 		});
 	});
@@ -36,6 +37,7 @@ describe('guided lessons', () => {
 			{ mode: 'encode', questions: 2 },
 		]);
 		expect(lesson.wordTargets).toEqual(['tea', 'tee']);
+		expect(lesson.encodeTargets).toEqual(['tea', 'tee']);
 		expect(lesson.newGlyphLimit).toBe(1);
 		expect(lessonQuestionTotal(lesson.steps)).toBe(8);
 	});
@@ -61,6 +63,7 @@ describe('guided lessons', () => {
 		expect(lesson.steps).not.toContainEqual(expect.objectContaining({ mode: 'word' }));
 		expect(lesson.steps).not.toContainEqual(expect.objectContaining({ mode: 'encode' }));
 		expect(lesson.wordTargets).toEqual([]);
+		expect(lesson.encodeTargets).toEqual([]);
 		expect(lesson.newGlyphLimit).toBe(2);
 	});
 
@@ -71,12 +74,55 @@ describe('guided lessons', () => {
 				{ ...newGlyphProgress(letter), introduced: true, attempts: 3 },
 			]),
 		);
-		const lesson = createGuidedLesson(curriculum, progress, ['tea', 'tee', 'toe', 'too'], {
-			completedLessons: 2,
-			recentWords: ['tea', 'tee'],
+		const lesson = createGuidedLesson(
+			curriculum,
+			progress,
+			['tea', 'tee', 'toe', 'too', 'tote', 'tattoo'],
+			{
+				completedLessons: 2,
+				recentWords: ['tea', 'tee'],
+			},
+		);
+
+		expect(lesson.wordTargets).toEqual(['toe', 'too', 'tote', 'tattoo']);
+		expect(lesson.encodeTargets).toEqual(['tea', 'tee']);
+	});
+
+	it('uses distinct targets across Words and Encoding when enough are available', () => {
+		const progress = Object.fromEntries(
+			curriculum.map((letter) => [
+				letter,
+				{ ...newGlyphProgress(letter), introduced: true, attempts: 3 },
+			]),
+		);
+		const lesson = createGuidedLesson(
+			curriculum,
+			progress,
+			['tea', 'tee', 'toe', 'too', 'tote', 'tattoo'],
+			{
+				completedLessons: 0,
+				recentWords: [],
+			},
+		);
+
+		expect(lesson.wordTargets).toEqual(['tea', 'tee', 'toe', 'too']);
+		expect(lesson.encodeTargets).toEqual(['tote', 'tattoo']);
+	});
+
+	it('allows only the necessary overlap when the target pool is small', () => {
+		const progress = Object.fromEntries(
+			curriculum.map((letter) => [
+				letter,
+				{ ...newGlyphProgress(letter), introduced: true, attempts: 3 },
+			]),
+		);
+		const lesson = createGuidedLesson(curriculum, progress, ['tea', 'tee', 'toe', 'too', 'tote'], {
+			completedLessons: 0,
+			recentWords: [],
 		});
 
-		expect(lesson.wordTargets).toEqual(['toe', 'too']);
+		expect(lesson.wordTargets).toEqual(['tea', 'tee', 'toe', 'too']);
+		expect(lesson.encodeTargets).toEqual(['tote', 'tea']);
 	});
 
 	it('alternates the order of contextual activities between lessons', () => {
@@ -92,5 +138,7 @@ describe('guided lessons', () => {
 		});
 
 		expect(lesson.steps.map((step) => step.mode)).toEqual(['glyph', 'encode', 'word']);
+		expect(lesson.wordTargets).toEqual(['tea', 'tee']);
+		expect(lesson.encodeTargets).toEqual(['tea', 'tee']);
 	});
 });

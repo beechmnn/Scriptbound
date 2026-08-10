@@ -32,7 +32,7 @@ describe('localized curricula and content', () => {
 			expect(words.length).toBeGreaterThanOrEqual(160);
 			expect(new Set(words).size).toBe(words.length);
 			expect(words.every((word) => /^[a-z]+$/.test(word))).toBe(true);
-			expect(words.every((word) => word.length >= 5 && word.length <= maximumLength)).toBe(true);
+			expect(words.every((word) => word.length >= 2 && word.length <= maximumLength)).toBe(true);
 			expect(new Set(words.map((word) => word.length)).size).toBeGreaterThanOrEqual(6);
 			for (const letter of alphabet) {
 				const occurrences = words.reduce(
@@ -40,6 +40,32 @@ describe('localized curricula and content', () => {
 					0,
 				);
 				expect(occurrences, `${language} coverage for ${letter}`).toBeGreaterThanOrEqual(3);
+			}
+		}
+	});
+
+	it('unlocks a varied word pool throughout the frequent-letter curriculum', () => {
+		for (const language of ['en', 'de'] as const) {
+			const order = curricula[language];
+			const words = practiceContent[language].words;
+			let previousAvailable = new Set<string>();
+
+			for (let glyphCount = 1; glyphCount <= 12; glyphCount++) {
+				const introduced = new Set(order.slice(0, glyphCount));
+				const available = new Set(
+					words.filter((word) => [...word].every((letter) => introduced.has(letter))),
+				);
+				const newlyAvailable = [...available].filter((word) => !previousAvailable.has(word));
+
+				if (glyphCount === 3)
+					expect(available.size, `${language} early pool`).toBeGreaterThanOrEqual(2);
+				if (glyphCount >= 3) {
+					expect(
+						newlyAvailable.length,
+						`${language} glyph ${order[glyphCount - 1]}`,
+					).toBeGreaterThanOrEqual(2);
+				}
+				previousAvailable = available;
 			}
 		}
 	});

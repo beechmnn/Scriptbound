@@ -44,6 +44,17 @@ export function unlockedGlyphTrialTiers(
 	).map((tier) => tier.id);
 }
 
+export function nextUnlockedGlyphTrialTier(
+	curriculum: string[],
+	progress: Record<string, GlyphProgress>,
+	tierId: GlyphTrialTierId,
+): GlyphTrialTierId | undefined {
+	const currentIndex = GLYPH_TRIAL_TIERS.findIndex((tier) => tier.id === tierId);
+	return GLYPH_TRIAL_TIERS.slice(currentIndex + 1).find((tier) =>
+		isGlyphTrialTierUnlocked(curriculum, progress, tier.id),
+	)?.id;
+}
+
 export function firstUncompletedUnlockedGlyphTrialTier(
 	curriculum: string[],
 	progress: Record<string, GlyphProgress>,

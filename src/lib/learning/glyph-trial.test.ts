@@ -8,6 +8,7 @@ import {
 	glyphTrialFinalTime,
 	glyphTrialPool,
 	isGlyphTrialTierUnlocked,
+	nextUnlockedGlyphTrialTier,
 	type GlyphTrialRecord,
 	unlockedGlyphTrialTiers,
 } from './glyph-trial';
@@ -49,6 +50,13 @@ describe('glyph fluency trials', () => {
 		expect(
 			unlockedGlyphTrialTiers(curriculum, introducedProgress(curriculum.slice(0, 17))),
 		).toEqual(['initiate', 'scribe']);
+	});
+
+	it('finds the next higher unlocked tier', () => {
+		const progress = introducedProgress(curriculum.slice(0, 18));
+		expect(nextUnlockedGlyphTrialTier(curriculum, progress, 'initiate')).toBe('scribe');
+		expect(nextUnlockedGlyphTrialTier(curriculum, progress, 'scribe')).toBe('scholar');
+		expect(nextUnlockedGlyphTrialTier(curriculum, progress, 'scholar')).toBeUndefined();
 	});
 
 	it('offers the first unlocked tier that has not been completed', () => {

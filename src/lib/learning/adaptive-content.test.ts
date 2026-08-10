@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
 	adaptiveEncodingCandidates,
 	adaptiveWordCandidates,
-	adaptiveWordPoolExhausted,
+	appendRecentText,
 	guidedIntroductionLetter,
 	isGuidedIntroductionSuccessful,
 	textLetters,
+	variedLessonTextCandidates,
+	variedTextCandidates,
 } from './adaptive-content';
 
 describe('adaptive contextual content', () => {
@@ -23,12 +25,46 @@ describe('adaptive contextual content', () => {
 		expect(adaptiveWordCandidates(['stone', 'glyph'], new Set(['t', 'e']), 'a')).toEqual([]);
 	});
 
-	it('exhausts adaptive words after every candidate has been shown', () => {
-		expect(adaptiveWordPoolExhausted(['tea'], ['tea'])).toBe(true);
-		expect(adaptiveWordPoolExhausted(['tea', 'team'], ['tea'])).toBe(false);
-		expect(adaptiveWordPoolExhausted(['tea', 'team'], ['team', 'tea'])).toBe(true);
-		expect(adaptiveWordPoolExhausted(['tea'], [])).toBe(false);
-		expect(adaptiveWordPoolExhausted([], ['tea'])).toBe(true);
+	it('prioritizes prompts that have never been shown', () => {
+		expect(variedTextCandidates(['tea', 'team', 'toe'], ['tea', 'team'])).toEqual(['toe']);
+	});
+
+	it('keeps recently shown prompts on cooldown after the whole pool has appeared', () => {
+		const candidates = ['tea', 'team', 'toe', 'too', 'tome'];
+		expect(variedTextCandidates(candidates, ['tea', 'team', 'toe', 'too', 'tome'])).toEqual([
+			'tea',
+			'team',
+		]);
+	});
+
+	it('keeps one candidate available for very small pools', () => {
+		expect(variedTextCandidates(['tea'], ['tea'])).toEqual(['tea']);
+		expect(variedTextCandidates(['tea', 'team'], ['tea', 'team'])).toEqual(['tea']);
+	});
+
+	it('prefers targets not yet shown in the current lesson in either activity order', () => {
+		const recent = ['tea', 'tee', 'toe', 'too', 'tote'];
+
+		expect(
+			variedLessonTextCandidates(['tote', 'tea'], recent, ['tea', 'tee', 'toe', 'too']),
+		).toEqual(['tote']);
+		expect(
+			variedLessonTextCandidates(['tea', 'tee', 'toe', 'too'], recent, ['tote', 'tea']),
+		).toEqual(['tee', 'toe']);
+	});
+
+	it('returns to the shared cooldown after every lesson target has appeared', () => {
+		expect(
+			variedLessonTextCandidates(
+				['tote', 'tea'],
+				['tea', 'tee', 'toe', 'too', 'tote'],
+				['tea', 'tee', 'toe', 'too', 'tote'],
+			),
+		).toEqual(['tea']);
+	});
+
+	it('bounds persisted prompt history', () => {
+		expect(appendRecentText(['one', 'two'], 'three', 2)).toEqual(['two', 'three']);
 	});
 
 	it('allows encoding prompts with at most the next new glyph', () => {

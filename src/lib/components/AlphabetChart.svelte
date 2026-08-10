@@ -1,5 +1,6 @@
 <script lang="ts">
 	import GlyphText from './GlyphText.svelte';
+	import AlphabetDownloads from './AlphabetDownloads.svelte';
 	import { alphabet } from '$lib/content';
 	import { copy } from '$lib/i18n';
 	import { locale } from '$lib/stores/locale';
@@ -24,6 +25,7 @@
 {#if selected}<p class="selected-glyph">
 		<GlyphText text={selected} /><span>{selected.toUpperCase()}</span>
 	</p>{/if}
+<AlphabetDownloads />
 
 <style>
 	.toolbar {
