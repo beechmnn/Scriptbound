@@ -1,5 +1,5 @@
 export type Locale = 'en' | 'de';
-export type PracticeMode = 'glyph' | 'word' | 'encode' | 'handwriting';
+export type PracticeMode = 'glyph' | 'word' | 'encode' | 'trace' | 'handwriting';
 export type PracticeSet = 'adaptive' | 'mistakes' | 'all';
 export type LearningStage = 'unseen' | 'acquiring' | 'reviewing' | 'learned' | 'durable';
 export type CourseGlyph = {

@@ -77,6 +77,7 @@ export const copy = {
 				glyph: 'Glyphs',
 				word: 'Words',
 				encode: 'Encode',
+				trace: 'Trace',
 			},
 			modeLabel: 'Practice mode',
 			lesson: {
@@ -163,6 +164,7 @@ export const copy = {
 				glyph: 'Which Latin letter is this?',
 				word: 'Decode this word',
 				encode: `Write this text in ${currentCourse.name}`,
+				trace: 'Trace the pale glyph, keeping your stroke close to its shape',
 				handwriting: `Draw the ${currentCourse.name} glyph for this letter`,
 			},
 			answer: 'Your answer',
@@ -202,6 +204,20 @@ export const copy = {
 					correct: 'Marked correct',
 					almost: 'Marked almost correct',
 					incorrect: 'Marked incorrect',
+				},
+			},
+			trace: {
+				canvas: 'Glyph tracing canvas',
+				submit: 'Check tracing',
+				missingParts: (count: number) =>
+					`${count} separate part${count === 1 ? ' is' : 's are'} still missing`,
+				missingRegions: 'A substantial branch or protruding part is still missing',
+				details: (coverage: number, precision: number) =>
+					`${coverage}% of the glyph covered · ${precision}% of your stroke stayed close`,
+				results: {
+					correct: 'Well traced',
+					almost: 'Close — follow more of the pale shape',
+					incorrect: 'Try to keep your stroke on the pale shape',
 				},
 			},
 			correct: 'Correct',
@@ -374,6 +390,7 @@ export const copy = {
 				glyph: 'Glyphen',
 				word: 'Wörter',
 				encode: 'Kodieren',
+				trace: 'Nachzeichnen',
 			},
 			modeLabel: 'Übungsmodus',
 			lesson: {
@@ -460,6 +477,7 @@ export const copy = {
 				glyph: 'Welcher lateinische Buchstabe ist das?',
 				word: 'Entschlüssle dieses Wort',
 				encode: `Schreibe diesen Text in ${currentCourse.name}`,
+				trace: 'Zeichne die helle Glyphe nach und bleibe mit deinem Strich nah an ihrer Form',
 				handwriting: `Zeichne die ${currentCourse.name}-Glyphe für diesen Buchstaben`,
 			},
 			answer: 'Deine Antwort',
@@ -500,6 +518,20 @@ export const copy = {
 					correct: 'Als richtig bewertet',
 					almost: 'Als fast richtig bewertet',
 					incorrect: 'Als falsch bewertet',
+				},
+			},
+			trace: {
+				canvas: 'Zeichenfläche zum Nachzeichnen',
+				submit: 'Nachzeichnung prüfen',
+				missingParts: (count: number) =>
+					`${count === 1 ? 'Ein separates Element fehlt' : `${count} separate Elemente fehlen`} noch`,
+				missingRegions: 'Ein wesentlicher Ast oder hervorstehender Teil fehlt noch',
+				details: (coverage: number, precision: number) =>
+					`${coverage} % der Glyphe abgedeckt · ${precision} % deines Strichs blieben nah an der Form`,
+				results: {
+					correct: 'Gut nachgezeichnet',
+					almost: 'Fast — folge der hellen Form noch etwas weiter',
+					incorrect: 'Versuche, mit deinem Strich auf der hellen Form zu bleiben',
 				},
 			},
 			correct: 'Richtig',

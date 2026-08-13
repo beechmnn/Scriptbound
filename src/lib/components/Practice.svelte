@@ -57,6 +57,7 @@
 		saveGlyphTrialRecord,
 	} from '$lib/stores/glyph-trials';
 	import type { Locale, PracticeMode, PracticeSet } from '$lib/types';
+	import type { TraceEvaluation } from '$lib/learning/trace-evaluator';
 	import { currentCourse } from '$lib/app';
 	const alphabet = currentCourse.glyphs.map(({ answer }) => answer);
 	type LessonStatus = 'inactive' | 'active' | 'transition' | 'complete';
@@ -170,6 +171,8 @@
 	let handwritingHasInk = $state(false),
 		drawingSubmitted = $state(false),
 		handwritingAssessment = $state<'correct' | 'almost' | 'incorrect' | null>(null),
+		traceEvaluation = $state<TraceEvaluation | null>(null),
+		traceEvaluateVersion = $state(0),
 		overlayOpacity = $state(0.45);
 	let answerInput = $state<HTMLInputElement>();
 	let activeContentElement = $state<HTMLElement>();
@@ -187,6 +190,7 @@
 			{ value: 'glyph', label: t.modes.glyph },
 			{ value: 'word', label: t.modes.word },
 			{ value: 'encode', label: t.modes.encode },
+			{ value: 'trace', label: t.modes.trace },
 		]),
 		simplifiedResult = $derived(
 			mode === 'word' || mode === 'encode' || (mode === 'glyph' && glyphAnswerMethod === 'buttons'),
@@ -330,7 +334,7 @@
 	}
 	function pool() {
 		const weak = weakLetters();
-		if (mode === 'glyph' || mode === 'handwriting')
+		if (mode === 'glyph' || mode === 'trace' || mode === 'handwriting')
 			return practiceSet === 'mistakes'
 				? weak.length
 					? weak
@@ -437,7 +441,7 @@
 			return nextTarget;
 		}
 		noAdaptiveWord = false;
-		return (mode === 'glyph' || mode === 'handwriting') && practiceSet !== 'all'
+		return (mode === 'glyph' || mode === 'trace' || mode === 'handwriting') && practiceSet !== 'all'
 			? weightedGlyphPick(values, previous)
 			: pick(values, previous);
 	}
@@ -463,6 +467,7 @@
 		await tick();
 		if (
 			mode !== 'encode' &&
+			mode !== 'trace' &&
 			mode !== 'handwriting' &&
 			(mode !== 'word' || wordAutoFocusEnabled) &&
 			(mode !== 'glyph' || glyphAnswerMethod === 'type')
@@ -795,6 +800,7 @@
 		handwritingHasInk = false;
 		drawingSubmitted = false;
 		handwritingAssessment = null;
+		traceEvaluation = null;
 		currentIsRetry = false;
 		startedAt = Date.now();
 		letterChoices = createLetterChoices(target, alphabet);
@@ -871,6 +877,17 @@
 	function submitDrawing() {
 		if (!handwritingHasInk || drawingSubmitted) return;
 		drawingSubmitted = true;
+		if (mode === 'trace') traceEvaluateVersion++;
+	}
+	function receiveTraceEvaluation(value: TraceEvaluation) {
+		if (mode !== 'trace' || handwritingAssessment) return;
+		drawingSubmitted = true;
+		traceEvaluation = value;
+		handwritingAssessment = value.assessment;
+		submitted = true;
+		correct = value.assessment === 'correct';
+		if (correct) score++;
+		scheduleNext(correct ? 1.5 : 3);
 	}
 	function assessHandwriting(value: 'correct' | 'almost' | 'incorrect') {
 		if (!drawingSubmitted || handwritingAssessment) return;
@@ -917,6 +934,7 @@
 			handwritingHasInk = false;
 			drawingSubmitted = false;
 			handwritingAssessment = null;
+			traceEvaluation = null;
 			currentIsRetry = true;
 			target = retry;
 			prepareTargetIntroduction();
@@ -973,7 +991,9 @@
 	<div class="mode-tabs" role="group" aria-label={t.modeLabel}>
 		{#each options as option}<button
 				class:active={!trialVisible && mode === option.value}
-				onclick={() => chooseFreeMode(option.value)}>{option.label}</button
+				onclick={() => chooseFreeMode(option.value)}
+				>{option.label}{#if option.value === 'trace'}<span class="demo-badge">Demo</span
+					>{/if}</button
 			>{/each}
 		<button class:active={trialVisible} onclick={showTrial}>{t.trial.tab}</button>
 	</div>
@@ -1279,9 +1299,10 @@
 					onContinue={beginGuidedPractice}
 				/>
 			{:else}
-				{#if mode === 'encode' || mode === 'handwriting'}
+				{#if mode === 'encode' || mode === 'trace' || mode === 'handwriting'}
 					<div class="latin-prompt">
-						<span>{mode === 'handwriting' ? target.toUpperCase() : target}</span>
+						<span>{mode === 'trace' || mode === 'handwriting' ? target.toUpperCase() : target}</span
+						>
 						{#if mode === 'encode' && submitted && !correct}<div
 								class="encoding-feedback-overlay error"
 								role="status"
@@ -1336,23 +1357,29 @@
 						submitted ? next() : submit();
 					}}
 				>
-					{#if mode === 'handwriting'}
-						{#key question}<HandwritingPad
-								reference={drawingSubmitted ? target : undefined}
-								{overlayOpacity}
+					{#if mode === 'trace' || mode === 'handwriting'}
+						{#key `${question}-${mode}`}<HandwritingPad
+								reference={mode === 'trace' || drawingSubmitted ? target : undefined}
+								overlayOpacity={mode === 'trace' ? 0.28 : overlayOpacity}
+								guideStyle={mode === 'trace' ? 'writing' : 'crosshair'}
+								constrainInkToReference={mode === 'trace'}
+								autoEvaluate={mode === 'trace'}
+								showControls={mode !== 'trace'}
 								disabled={drawingSubmitted}
-								label={t.handwriting.canvas}
+								evaluateVersion={traceEvaluateVersion}
+								label={mode === 'trace' ? t.trace.canvas : t.handwriting.canvas}
 								undoLabel={t.handwriting.undo}
 								clearLabel={t.handwriting.clear}
 								onChange={(hasInk: boolean) => (handwritingHasInk = hasInk)}
+								onEvaluate={receiveTraceEvaluation}
 							/>{/key}
-						{#if drawingSubmitted}
+						{#if mode === 'handwriting' && drawingSubmitted}
 							<label class="overlay-control">
 								<span>{t.handwriting.overlay}</span>
 								<input type="range" min="0.1" max="0.9" step="0.05" bind:value={overlayOpacity} />
 							</label>
 						{/if}
-						{#if drawingSubmitted && !handwritingAssessment}
+						{#if mode === 'handwriting' && drawingSubmitted && !handwritingAssessment}
 							<fieldset class="self-assessment">
 								<legend>{t.handwriting.assess}</legend>
 								<div>
@@ -1375,7 +1402,21 @@
 								class="feedback"
 								role="status"
 							>
-								<strong>{t.handwriting.results[handwritingAssessment]}</strong>
+								<strong
+									>{mode === 'trace' && traceEvaluation?.missingComponents
+										? t.trace.missingParts(traceEvaluation.missingComponents)
+										: mode === 'trace' && traceEvaluation?.missingRegions
+											? t.trace.missingRegions
+											: mode === 'trace'
+												? t.trace.results[handwritingAssessment]
+												: t.handwriting.results[handwritingAssessment]}</strong
+								>
+								{#if mode === 'trace' && traceEvaluation}<span class="trace-details"
+										>{t.trace.details(
+											Math.round(traceEvaluation.coverage * 100),
+											Math.round(traceEvaluation.precision * 100),
+										)}</span
+									>{/if}
 							</div>
 							<div class="next-indicator" aria-live="polite">
 								<span>{t.next(nextCountdown)}</span>
@@ -1388,7 +1429,8 @@
 							{#if !drawingSubmitted}<button
 									type="button"
 									disabled={!handwritingHasInk}
-									onclick={submitDrawing}>{t.handwriting.submit}</button
+									onclick={submitDrawing}
+									>{mode === 'trace' ? t.trace.submit : t.handwriting.submit}</button
 								>
 							{:else if handwritingAssessment}<button type="button" onclick={next}
 									>{t.nextButton}</button
@@ -2380,6 +2422,20 @@
 			opacity: 0;
 			transform: translateY(0.35rem) scale(0.94);
 		}
+	}
+	.demo-badge {
+		display: inline-flex;
+		align-items: center;
+		margin-left: 0.45rem;
+		padding: 0.12rem 0.35rem;
+		border: 1px solid currentcolor;
+		border-radius: 999px;
+		font-size: 0.56rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		line-height: 1;
+		text-transform: uppercase;
+		opacity: 0.78;
 	}
 	@media (max-width: 760px) {
 		.lesson-progress {
